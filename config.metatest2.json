@@ -1,0 +1,9 @@
+{
+	"mqtt": {
+		"host": "10.0.0.1",
+		"port": 1883
+	},
+	"server_id": "metatest2",
+	"topic_prefix": "crosschat/",
+	"last_will_topic": "crosschat/state/metatest2/online"
+}
