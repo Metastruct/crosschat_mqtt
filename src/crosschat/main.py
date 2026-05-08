@@ -12,6 +12,8 @@ import structlog
 
 from crosschat.state import CrossChatState
 
+import crosschat.monitor_ext  # noqa: F401  register aiomonitor commands
+
 
 def parse_args() -> argparse.Namespace:
 	parser = argparse.ArgumentParser()

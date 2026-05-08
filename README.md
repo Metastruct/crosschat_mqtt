@@ -10,9 +10,9 @@ Game server cross-chat via MQTT.
 ## Usage
 
 ```sh
-uv run python src/crosschat/main.py
-uv run python src/crosschat/main.py --config config.metatest2.json
-uv run python src/crosschat/main.py --server-id metatest2 --host 10.0.0.1 -v
+PYTHONPATH=src uv run python -m crosschat.main
+PYTHONPATH=src uv run python -m crosschat.main --config config.metatest2.json
+PYTHONPATH=src uv run python -m crosschat.main --server-id metatest2 --host 10.0.0.1 -v
 ```
 
 Connect to the aiomonitor REPL:
