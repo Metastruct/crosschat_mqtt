@@ -10,7 +10,7 @@ _M._RAW = setmetatable({}, {
 	end
 })
 
-IN_DBG = _RAW.IN_DBG or false
+IN_DBG = _RAW.IN_DBG or true
 
 function dbg(...)
 	if IN_DBG then
@@ -342,7 +342,13 @@ end
 
 net.Receive(Tag, function(len)
 	local what = net.ReadUInt(8)
-	what = translate[what] or what
+	local what_s = translate[what] or what
+	if type(what_s) == 'number' then
+		dbg('net.Receive: unknown type', what)
+		return
+	end
+	what = what_s
+	dbg('net.Receive:', what)
 
 	if what == 'join' then
 		local ServerID = net.ReadString()
@@ -351,7 +357,9 @@ net.Receive(Tag, function(len)
 		local Name = net.ReadString()
 		local Team = net.ReadUInt(32)
 		local extra = net.ReadTable()
+		dbg('net.Receive join:', ServerID, UserID, Name)
 		PlayerJoin(ServerID, UserID, Name, SteamID64, Team, extra)
+		dbg('net.Receive join done, serverdata count:', table.Count(serverdata))
 	elseif what == 'left' then
 		local ServerID = net.ReadString()
 		local UserID = net.ReadUInt(32)
@@ -363,8 +371,10 @@ net.Receive(Tag, function(len)
 		local Txt = net.ReadString()
 		PlayerSay(ServerID, UserID, Txt)
 	elseif what == 'startburst' then
+		dbg('net.Receive: startburst')
 		joinburst = true
 	elseif what == 'endburst' then
+		dbg('net.Receive: endburst')
 		joinburst = false
 	elseif what == 'status' then
 		local ServerID = net.ReadString()
@@ -379,7 +389,25 @@ net.Receive(Tag, function(len)
 	end
 end)
 
-net.Start(Tag)
-net.WriteUInt(1, 8)
-joinburst = true
-net.SendToServer()
+timer.Simple(1, function()
+	if util.NetworkStringToID(Tag) < 1 then
+		dbg('Network string not ready, retrying...')
+		timer.Simple(1, function()
+			if util.NetworkStringToID(Tag) < 1 then
+				dbg('Network string never ready, giving up')
+				return
+			end
+			net.Start(Tag)
+			net.WriteUInt(1, 8)
+			joinburst = true
+			net.SendToServer()
+			dbg('subscription sent (retry)')
+		end)
+		return
+	end
+	net.Start(Tag)
+	net.WriteUInt(1, 8)
+	joinburst = true
+	net.SendToServer()
+	dbg('subscription sent')
+end)

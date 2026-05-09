@@ -131,6 +131,7 @@ local function broadcast(msg_type, ...)
 	end
 
 	END()
+	dbg('broadcast:', msg_type, 'to', #subscribers, 'subs')
 end
 
 local function broadcast_all(where, msg_type, ...)
@@ -150,6 +151,7 @@ local function broadcast_all(where, msg_type, ...)
 	end
 
 	END(where)
+	dbg('broadcast_all:', msg_type, 'to', #where, 'plys')
 end
 
 local function set_burst(start, where)
@@ -208,11 +210,14 @@ hook.Add('Think', Tag, clean_subscribers)
 
 local function sync_player(ply)
 	local t = {ply}
+	local local_count = 0
+	local remote_count = 0
 	set_burst(true, t)
 
 	for uid, user in pairs(local_users) do
 		if not user.left then
 			broadcast_all(t, 'join', SERVER_ID, uid, user.steamid64 or '', user.name or 'Unknown', user.team or 1, user.extra or {})
+			local_count = local_count + 1
 		end
 	end
 
@@ -221,12 +226,14 @@ local function sync_player(ply)
 			for uid, user in pairs(server.users) do
 				if not user.left then
 					broadcast_all(t, 'join', sid, uid, user.steamid64 or '', user.name or 'Unknown', user.team or 1, user.extra or {})
+					remote_count = remote_count + 1
 				end
 			end
 		end
 	end
 
 	set_burst(false, t)
+	DBG('sync_player sent to', ply, '- local:', local_count, 'remote:', remote_count, 'total_servers:', table.Count(servers))
 end
 
 local function get_join_packet(ply)
@@ -254,7 +261,9 @@ function add_local_user(ply)
 	local data = get_join_packet(ply)
 	data.id = uid
 	local_users[uid] = data
+	DBG('add_local_user:', ply, 'uid=', uid, 'name=', data.name, 'total_local=', table.Count(local_users))
 
+	local mqtt_sent = 0
 	for sid, server in pairs(servers) do
 		if sid ~= SERVER_ID and server.online then
 			local payload = {
@@ -273,10 +282,14 @@ function add_local_user(ply)
 				end
 			end
 			publish('m/' .. SERVER_ID .. '/' .. sid .. '/user', payload)
+			mqtt_sent = mqtt_sent + 1
 		end
 	end
+	DBG('add_local_user: mqtt sent to', mqtt_sent, 'servers')
 
+	local subs_before = #subscribers
 	broadcast('join', SERVER_ID, uid, data.steamid64, data.name, data.team, data.extra or {})
+	DBG('add_local_user: broadcast join to', subs_before, 'subscribers')
 
 	return uid
 end
@@ -355,15 +368,22 @@ end
 
 function handle_state_status(sid, payload)
 	local ok, data = pcall(json.decode, payload)
-	if not ok then return end
+	if not ok then
+		DBG('handle_state_status: bad payload from', sid, payload)
+		return
+	end
 
 	local started = data.started or 0
 	local server = get_server(sid)
 	local prev_started = server.started
 	server.started = started
 	server.online = started > 0
+	DBG('handle_state_status:', sid, 'started=', started, 'online=', server.online, 'prev=', prev_started)
 
-	if started == prev_started then return end
+	if started == prev_started then
+		DBG('handle_state_status: no change, skipping')
+		return
+end
 
 	if started > 0 then
 		DBG('Server online:', sid)
@@ -509,6 +529,7 @@ function on_mqtt(topic, payload)
 	if topic:sub(1, #TOPIC_PREFIX) ~= TOPIC_PREFIX then return end
 	local path = topic:sub(#TOPIC_PREFIX + 1)
 	local parts = string.Explode('/', path)
+	DBG('on_mqtt:', topic, 'parts=', table.ToString(parts))
 
 	if parts[1] == 'state' and #parts >= 3 then
 		local sid = parts[2]
@@ -528,12 +549,17 @@ function on_mqtt(topic, payload)
 		local from_sid = parts[2]
 		local to_sid = parts[3]
 
-		if to_sid ~= SERVER_ID then return end
+		if to_sid ~= SERVER_ID then
+			DBG('on_mqtt: not for us, to_sid=', to_sid, 'our=', SERVER_ID)
+			return
+		end
 		local endpoint = parts[4]
 
 		if endpoint == 'user' then
+			DBG('on_mqtt: user msg from', from_sid, 'payload=', payload)
 			handle_m_user(from_sid, payload)
 		elseif endpoint == 'say' and #parts >= 5 then
+			DBG('on_mqtt: say msg from', from_sid, 'user=', parts[5])
 			handle_m_say(from_sid, parts[5], payload)
 		end
 	end
@@ -541,10 +567,12 @@ end
 
 net.Receive(Tag, function(len, ply)
 	local what = net.ReadUInt(8)
+	DBG('net.Receive from', ply, 'what=', what)
 
 	if what == 1 then
 		if not table.HasValue(subscribers, ply) then
 			table.insert(subscribers, ply)
+			DBG('Client subscribed:', ply, 'total subs:', #subscribers)
 		end
 
 		sync_player(ply)
@@ -552,8 +580,12 @@ net.Receive(Tag, function(len, ply)
 end)
 
 hook.Add('PlayerInitialSpawn', Tag, function(ply)
+	DBG('PlayerInitialSpawn:', ply, ply:Nick())
 	timer.Simple(0, function()
-		if not IsValid(ply) then return end
+		if not IsValid(ply) then
+			DBG('PlayerInitialSpawn: ply invalid after timer')
+			return
+		end
 		ply._crosschat_uid = add_local_user(ply)
 	end)
 end)
