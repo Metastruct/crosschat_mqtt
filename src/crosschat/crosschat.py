@@ -32,6 +32,7 @@ class CrossChat:
 		self.state = CrossChatState()
 		self._config: dict = {}
 		self._verbose = verbose
+		self.shutdown = asyncio.Event()
 
 		if isinstance(config, (str, Path)):
 			self.load_config(Path(config))
@@ -282,7 +283,7 @@ class CrossChat:
 				else:
 					log.warning('unknown_message_endpoint', topic=topic, endpoint=endpoint)
 
-	async def run(self) -> None:
+	async def run(self, tg: asyncio.TaskGroup) -> None:
 		self.setup_logging(self._verbose)
 		config = self._config
 
@@ -369,16 +370,13 @@ class CrossChat:
 			else:
 				monitor = None
 
-			async with asyncio.TaskGroup() as tg:
-				tg.create_task(self.listen_messages(client, tg), name='mqtt_listener')
+			tg.create_task(self.listen_messages(client, tg), name='mqtt_listener')
 
-				if monitor is not None:
-					with monitor:
-						await asyncio.sleep(5)
-						tg.create_task(self.run_local_console(monitor), name='local_console')
-						log.info('running', server_id=sid)
-				else:
-					log.info('running (no console)', server_id=sid)
-					await asyncio.Event().wait()
+			if monitor is not None:
+				with monitor:
+					await asyncio.sleep(5)
+					tg.create_task(self.run_local_console(monitor), name='local_console')
+					log.info('running', server_id=sid)
+			await self.shutdown.wait()
 
 		log.info('shutdown', server_id=sid)

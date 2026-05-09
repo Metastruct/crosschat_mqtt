@@ -32,19 +32,12 @@ def do_add(ctx: click.Context, name: str) -> None:
 	"""
 	monitor = ctx.obj
 	state = monitor.console_locals.get('state')
-	client = monitor.console_locals.get('client')
-	if state is None or client is None:
-		print_fail('state or client not available')
+	if state is None:
+		print_fail('state not available')
 		return
 	user_id = state._next_seq
-	user = state.add_user(user_id, name)
-	payload = json.dumps(user.serialize())
-	for sid, server in state.servers.items():
-		if sid != state._own_id and server.online:
-			asyncio.create_task(
-				client.publish(f'crosschat/m/{state._own_id}/{sid}/user/{user.id}', payload=payload, qos=2)
-			)
-	click.echo(f'User {user_id} ({name}) added with seq {user.id}')
+	asyncio.create_task(state.add_user_and_broadcast(name))
+	click.echo(f'User {user_id} ({name}) added with seq {user_id}')
 
 
 @monitor_cli.command(name='del')
@@ -58,26 +51,22 @@ def do_del(ctx: click.Context, user_id: str) -> None:
 	"""
 	monitor = ctx.obj
 	state = monitor.console_locals.get('state')
-	client = monitor.console_locals.get('client')
-	if state is None or client is None:
-		print_fail('state or client not available')
+	if state is None:
+		print_fail('state not available')
 		return
 	try:
 		uid = int(user_id)
 	except ValueError:
 		print_fail(f'Invalid user id: {user_id}')
 		return
-	user = state.remove_user(uid)
+	server = state.servers.get(state._own_id)
+	user = server.users.get(uid) if server else None
 	if user is None:
 		print_fail(f'User {user_id} not found')
 		return
-	payload = json.dumps({})
-	for sid, server in state.servers.items():
-		if sid != state._own_id and server.online:
-			asyncio.create_task(
-				client.publish(f'crosschat/m/{state._own_id}/{sid}/user/{user.id}/remove', payload=payload, qos=2)
-			)
-	click.echo(f'User {user_id} ({user.name}) removed')
+	user_name = user.name
+	asyncio.create_task(state.remove_user_and_broadcast(uid))
+	click.echo(f'User {user_id} ({user_name}) removed')
 
 
 @monitor_cli.command(name='msg')

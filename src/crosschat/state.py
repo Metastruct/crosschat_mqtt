@@ -104,6 +104,47 @@ class CrossChatState:
 		server = self._ensure_server(self._own_id)
 		return server.users.pop(user_id, None)
 
+	async def add_user_and_broadcast(self, name: str, extra: dict | None = None) -> int:
+		user_id = self._next_seq
+		server = self._ensure_server(self._own_id)
+		user = CrossChatUser(
+			name=name,
+			first_seen=datetime.now(timezone.utc),
+			server=server,
+			id=user_id,
+			extra=extra or {},
+		)
+		self._next_seq += 1
+		server.users[user_id] = user
+
+		if self._client is not None:
+			payload = json.dumps(user.serialize())
+			for sid, srv in self.servers.items():
+				if sid != self._own_id and srv.online:
+					await self._client.publish(
+						f'{self._prefix}m/{self._own_id}/{sid}/user/{user.id}',
+						payload=payload,
+						qos=2,
+					)
+		return user_id
+
+	async def remove_user_and_broadcast(self, user_id: int) -> CrossChatUser | None:
+		server = self._ensure_server(self._own_id)
+		user = server.users.pop(user_id, None)
+		if user is None:
+			return None
+
+		if self._client is not None:
+			payload = json.dumps({})
+			for sid, srv in self.servers.items():
+				if sid != self._own_id and srv.online:
+					await self._client.publish(
+						f'{self._prefix}m/{self._own_id}/{sid}/user/{user.id}/remove',
+						payload=payload,
+						qos=2,
+					)
+		return user
+
 	def subscribe_ooc(self, ooc_name: str, callback: Callable) -> None:
 		if ooc_name not in self._ooc_subscribers:
 			self._ooc_subscribers[ooc_name] = []

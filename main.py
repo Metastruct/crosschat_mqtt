@@ -1,11 +1,15 @@
 import argparse
 import asyncio
+import random
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'src'))
 
 from crosschat import CrossChat
+
+
+FAKE_NAMES = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Hank']
 
 
 def parse_args() -> argparse.Namespace:
@@ -19,6 +23,10 @@ def parse_args() -> argparse.Namespace:
 	return parser.parse_args()
 
 
+async def add_and_broadcast(chat: CrossChat, name: str) -> None:
+	await chat.state.add_user_and_broadcast(name)
+
+
 async def main() -> None:
 	args = parse_args()
 	chat = CrossChat(
@@ -29,7 +37,24 @@ async def main() -> None:
 		console_port=args.console_port,
 		verbose=args.verbose,
 	)
-	await chat.run()
+	_infinite = asyncio.Event()
+
+	async with asyncio.TaskGroup() as tg:
+		count = random.randint(1, 2)
+		print('adding immediate fake users')
+		for _ in range(count):
+			name = random.choice(FAKE_NAMES)
+			await add_and_broadcast(chat, 'Imm' + name)
+
+		async def add_fake():
+
+			await asyncio.sleep(4)
+			print('adding late user')
+			await add_and_broadcast(chat, 'LateUser1')
+
+		tg.create_task(add_fake(), name='add_fake_user')
+		tg.create_task(chat.run(tg), name='crosschat')
+		await _infinite.wait()
 
 
 if __name__ == '__main__':
