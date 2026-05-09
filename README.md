@@ -1,7 +1,51 @@
-# crosschat-python
+# Crosschat (mqtt edition) (WIP)
 
 Game server cross-chat via MQTT.
+Everything was written by AI, sorry. This is for thinking if it makes any sense.
 
+## TODO
+
+ - Lua
+   - Server
+      - HIGH: private messaging
+   - Client
+      - HIGH: private messaging command line example
+      - HIGH: ooc/oob example of cross server lua execution 
+	  - BUG: do not print local player(s)
+	  - BUG: fix join/leave burst still appearing
+	  - FEAT: Fix gmod/meta scoreboard to accept format with no steamid
+ - Python
+   - library
+      - HIGH: private messaging
+   - webchat frontend
+      - FEAT: "scoreboard"
+	  - FEAT: actual chat view instead of debug view
+      - HIGH: private messaging
+	  - HIGH: steam login (and/or discord?)
+   - daemon
+	  - HIGH: steam login? (where to fetc bans?)
+	  - HIGH: Finish PM Interface
+      - IDEA: publish chat log stream for website
+	  - IDEA: authenticate via JWT to talk via websocket/etc from ingame
+	  - IDEA: long poll chat? (vrchat "bridge" https://creators.vrchat.com/worlds/udon/string-loading/ )
+	  - Discord/Matrix bridge (if not node.js)
+	    - only users who speak become visible
+	  - IDEA: IRC "gateway"
+	  - BUG: does not shutdown gracefully
+	  - test library separation mode 
+ - C#
+   - library
+      - private messaging
+      - test integrating with Basis VR, SBox
+ - Node
+   - Unimplemented
+   - discord bridge. Replaces metaconcord bridge: https://github.com/Metastruct/node-metaconcord/
+   - https://github.com/Metastruct/node-metaconcord/blob/master/app/services/gamebridge/payloads/ChatPayload.ts
+ - ALL / misc
+   - FEAT: avatars  
+   - BUG: ai smell
+   - FEAT: keepalive?
+   - 
 ## Requirements
 
 - Python >= 3.14
