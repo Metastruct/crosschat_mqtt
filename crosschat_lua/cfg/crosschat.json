@@ -1,0 +1,13 @@
+{
+	"server_id": "testgmod1",
+	"topic_prefix": "crosschat/",
+	"mqtt": {
+		"host": "127.0.0.1",
+		"port": 1883,
+		"username": "user",
+		"password": "password"
+	},
+	"meta": {
+		"link": "steam://connect/YOUR_IP:27015"
+	}
+}

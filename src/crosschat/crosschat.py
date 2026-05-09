@@ -276,7 +276,7 @@ class CrossChat:
 					log.info('user_removed', server_id=from_sid, user_id=user_id)
 			else:
 				first_seen_str = data.get('first_seen')
-				first_seen = datetime.fromisoformat(first_seen_str) if first_seen_str else datetime.now(timezone.utc)
+				first_seen = datetime.fromtimestamp(int(first_seen_str), tz=timezone.utc) if first_seen_str else datetime.now(timezone.utc)
 				known = {'name', 'first_seen', 'server', 'burst', 'cmd', 'id'}
 				extra = {k: v for k, v in data.items() if k not in known}
 				user = CrossChatUser(

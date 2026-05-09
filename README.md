@@ -256,3 +256,11 @@ The `CrossChatUser` class provides a `serialize()` method that returns a JSON-se
 | `del <id>` | Remove a local user and broadcast removal |
 | `say <userid> <message>` | Send a message to a user on all online servers |
 | `pm <from_user_id> <target_server_id> <to_user_id> <message>` | Send a private message from a local user to a user on another server |
+
+## Lua (Garry's Mod) Implementation
+
+A Garry's Mod Lua implementation is available in
+[`crosschat_lua/`](crosschat_lua/). It uses the `mosquitto` Garry's Mod module
+for MQTT communication and the same topic/payload protocol as the Python
+reference server. See the [`crosschat_lua/README.md`](crosschat_lua/README.md)
+for installation and configuration details.

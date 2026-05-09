@@ -26,7 +26,7 @@ class CrossChatUser:
 	def serialize(self) -> dict[Any, Any]:
 		result = {
 			'name': self.name,
-			'first_seen': self.first_seen.isoformat(),
+			'first_seen': int(self.first_seen.timestamp()),
 			'server': self.server.id,
 		}
 		result.update(self.extra)
