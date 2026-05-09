@@ -26,7 +26,7 @@ properties = Properties(PacketTypes.CONNECT)
 properties.SessionExpiryInterval = 9
 
 
-log = structlog.get_logger()
+log: structlog.stdlib.BoundLogger = structlog.get_logger()
 DEBUG = True
 
 
@@ -161,16 +161,21 @@ class CrossChat:
 		log.debug('init', client)
 		state = self.state
 
-		sid = self.state._own_id
+		me = state._own_id
+
 		await client.subscribe('crosschat/state/+/#')
 		await client.subscribe(f'crosschat/m/+/{state._own_id}/#')
 
-		await self.state.publish(f'state/{sid}/status', payload={'started': self.started}, retain=True)
-		log.info('state_published', topic=f'state/{sid}/status', started=self.started)
+		# broadcast state and set it on us immediately
+		status = {'started': self.started}
+		self.state.set_status(me, self.started)
+		await self.state.publish(f'state/{me}/status', payload=status, retain=True)
+		log.info('state_published', topic=f'state/{me}/status', started=self.started)
 
+		# publish other metadata
 		meta_payload = self._config.get('meta', {})
-		await self.state.publish(f'state/{sid}/meta', payload=meta_payload, retain=True)
-		log.info('state_published', topic=f'state/{sid}/meta', state=meta_payload)
+		await self.state.publish(f'state/{me}/meta', payload=meta_payload, retain=True)
+		log.info('state_published', topic=f'state/{me}/meta', state=meta_payload)
 		self.state.set_meta(self._config.get('meta', {}))
 
 	async def listen_messages(self, client: aiomqtt.Client, tg: asyncio.TaskGroup) -> None:
@@ -239,6 +244,7 @@ class CrossChat:
 				printed.append(task)
 				print('attempting to cancel:', task.get_name(), task)
 				task.cancel()
+				# TODO: this is a hack
 
 	# l = asyncio.get_running_loop()
 	# l.run_until_complete(self.state.publish(f'state/{sid}/status', payload=payload, retain=True))
@@ -248,6 +254,9 @@ class CrossChat:
 	) -> None:
 		state = self.state
 		sid = parts[2]
+		if sid == self.sid:
+			print('ignore loopback message', payload)
+			return
 		key = parts[3]
 		if key == 'status':
 			prev = state.servers.get(sid)
@@ -257,6 +266,7 @@ class CrossChat:
 				started = data.get('started', 0)
 			except (json.JSONDecodeError, TypeError):
 				started = 0
+			state._ensure_server(sid)
 			state.set_status(sid, started)
 			server = state.servers.get(sid)
 			if started != prev_started:
@@ -402,6 +412,7 @@ class CrossChat:
 			to_name=receiver_user.name if receiver_user else '?',
 			say=say_text,
 		)
+		log.error('not implemented')
 
 	async def run(self, tg: asyncio.TaskGroup) -> None:
 		self.setup_logging(self._verbose)
