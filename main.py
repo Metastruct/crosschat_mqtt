@@ -69,15 +69,13 @@ async def main() -> None:
 		async def send_messages():
 			await asyncio.sleep(6)
 			for uid in fake_user_ids:
-				payload = json.dumps({'msg': f'Hello from user {uid}'})
+				payload = json.dumps({'say': f'Hello from user {uid}'})
 				for sid, server in chat.state.servers.items():
 					if sid != chat.state._own_id and server.online:
-						tg.create_task(
-							chat.state.publish(f'm/{chat.state._own_id}/{sid}/msg/{uid}', payload=payload)
-						)
+						tg.create_task(chat.state.publish(f'm/{chat.state._own_id}/{sid}/say/{uid}', payload=payload))
 				user = chat.state.servers[chat.state._own_id].users.get(uid)
 				if user:
-					tg.create_task(handler.on_msg(user, f'Hello from user {uid}'))
+					tg.create_task(handler.on_say(user, f'Hello from user {uid}'))
 
 		webchat_app.state.crosschat = chat
 		webchat_config = uvicorn.Config(webchat_app, host=webchat_host, port=webchat_port, log_level='info')

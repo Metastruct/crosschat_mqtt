@@ -252,8 +252,8 @@ class CrossChat:
 		endpoint = parts[4]
 		if endpoint == 'user':
 			await self._handle_user_message(from_sid, topic, parts, payload)
-		elif endpoint == 'msg' and len(parts) == 6:
-			await self._handle_msg_message(from_sid, topic, parts, payload)
+		elif endpoint == 'say' and len(parts) == 6:
+			await self._handle_say_message(from_sid, topic, parts, payload)
 		elif endpoint == 'ooc' and len(parts) == 6:
 			await self._handle_ooc_message(from_sid, topic, parts, payload)
 		elif endpoint == 'pm' and len(parts) == 7:
@@ -299,17 +299,17 @@ class CrossChat:
 		if self._handler is not None and user is not None and cmd in ('add', 'del', 'update'):
 			await self._handler.on_user(user, cmd, burst=burst)
 
-	async def _handle_msg_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
+	async def _handle_say_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
 		state = self.state
 		sender_id = int(parts[5])
 		data = json.loads(payload)
-		msg_text = data.get('msg', '')
+		say_text = data.get('say', '')
 		server = state._ensure_server(from_sid, ensure=True)
 		user = server.get_user(sender_id, ensure=True)
-		log.debug('MESSAGE', sender=user, msg=msg_text)
+		log.debug('SAY', sender=user, say=say_text)
 		if self._handler is not None:
 			assert user
-			await self._handler.on_msg(user, msg_text)
+			await self._handler.on_say(user, say_text)
 
 	async def _handle_ooc_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
 		state = self.state
@@ -322,7 +322,7 @@ class CrossChat:
 		from_user_id = int(parts[5])
 		to_user_id = int(parts[6])
 		data = json.loads(payload)
-		msg_text = data.get('msg', '')
+		say_text = data.get('say', '')
 		sender_server = state.servers.get(from_sid)
 		sender_user = sender_server.users.get(from_user_id) if sender_server else None
 		receiver_server = state.servers.get(state._own_id)
@@ -334,7 +334,7 @@ class CrossChat:
 			from_name=sender_user.name if sender_user else '?',
 			to_user=to_user_id,
 			to_name=receiver_user.name if receiver_user else '?',
-			msg=msg_text,
+			say=say_text,
 		)
 
 	async def run(self, tg: asyncio.TaskGroup) -> None:

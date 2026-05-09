@@ -84,15 +84,15 @@ def do_del(ctx: click.Context, user_id: str) -> None:
 	click.echo(f'User {user_id} ({user_name}) removed')
 
 
-@monitor_cli.command(name='msg')
+@monitor_cli.command(name='say')
 @click.argument('user_id')
 @click.argument('message', nargs=-1, required=True)
 @auto_command_done
-def do_msg(ctx: click.Context, user_id: str, message: tuple[str, ...]) -> None:
+def do_say(ctx: click.Context, user_id: str, message: tuple[str, ...]) -> None:
 	"""
 	Send a message to a user on all online game servers.
 
-	Usage: msg <userid> <message>
+	Usage: say <userid> <message>
 	"""
 	monitor = ctx.obj
 	state = monitor.console_locals.get('state')
@@ -111,18 +111,16 @@ def do_msg(ctx: click.Context, user_id: str, message: tuple[str, ...]) -> None:
 		print_fail(f'User {user_id} not found')
 		return
 	user = own_server.users[uid]
-	msg_text = ' '.join(message)
-	payload = json.dumps({'msg': msg_text})
+	say_text = ' '.join(message)
+	payload = json.dumps({'say': say_text})
 	targets = 0
 	for sid, server in state.servers.items():
 		if sid != state._own_id and server.online:
 			targets += 1
-			tg.create_task(
-				state.publish(f'm/{state._own_id}/{sid}/msg/{user.id}', payload=payload)
-			)
+			tg.create_task(state.publish(f'm/{state._own_id}/{sid}/say/{user.id}', payload=payload))
 	handler: object | None = monitor.console_locals.get('handler')
 	if handler is not None:
-		tg.create_task(handler.on_msg(user, msg_text))
+		tg.create_task(handler.on_say(user, say_text))
 	click.echo(f'Message sent to {user_id} ({user.name}) on {targets} online server(s)')
 
 
@@ -132,7 +130,9 @@ def do_msg(ctx: click.Context, user_id: str, message: tuple[str, ...]) -> None:
 @click.argument('to_user_id')
 @click.argument('message', nargs=-1, required=True)
 @auto_command_done
-def do_pm(ctx: click.Context, from_user_id: str, target_server_id: str, to_user_id: str, message: tuple[str, ...]) -> None:
+def do_pm(
+	ctx: click.Context, from_user_id: str, target_server_id: str, to_user_id: str, message: tuple[str, ...]
+) -> None:
 	"""
 	Send a private message from a local user to a user on another server.
 
@@ -145,8 +145,8 @@ def do_pm(ctx: click.Context, from_user_id: str, target_server_id: str, to_user_
 	if state is None or client is None or tg is None:
 		print_fail('state, client or tg not available')
 		return
-	msg_text = ' '.join(message)
-	payload = json.dumps({'msg': msg_text})
+	say_text = ' '.join(message)
+	payload = json.dumps({'say': say_text})
 	tg.create_task(
 		state.publish(f'm/{state._own_id}/{target_server_id}/pm/{from_user_id}/{to_user_id}', payload=payload)
 	)

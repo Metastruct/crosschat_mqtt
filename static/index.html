@@ -182,11 +182,11 @@ function handleMessage(raw) {
 			addEntry('received', makeUserText(msg), raw);
 			break;
 
-		case 'msg':
+		case 'say':
 			addEntry('received', makeChatText(msg), raw);
 			break;
 
-		case 'msg_sent':
+		case 'say_sent':
 			addEntry('system', 'Message sent', raw);
 			break;
 
@@ -224,7 +224,7 @@ function makeUserText(msg) {
 
 function makeChatText(msg) {
 	const u = msg.user || {};
-	return '<span class="chat-user">' + esc(u.name || '?') + ':</span> <span class="chat-msg">' + esc(msg.msg || '') + '</span>';
+	return '<span class="chat-user">' + esc(u.name || '?') + ':</span> <span class="chat-msg">' + esc(msg.say || '') + '</span>';
 }
 
 function esc(s) {
@@ -243,7 +243,7 @@ function addEntry(type, html, raw) {
 	const tag = document.createElement('span');
 	tag.className = 'tag ' + type;
 	tag.textContent = {
-		sent: 'sent', received: 'msg', system: 'sys', error: 'error'
+		sent: 'sent', received: 'say', system: 'sys', error: 'error'
 	}[type] || type;
 	head.appendChild(tag);
 
@@ -280,8 +280,8 @@ function addEntry(type, html, raw) {
 function sendMessage() {
 	const text = msgInput.value.trim();
 	if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
-	addEntry('sent', makeChatText({user: {name: myName}, msg: text}), JSON.stringify({cmd: 'msg', msg: text}));
-	ws.send(JSON.stringify({cmd: 'msg', msg: text}));
+	addEntry('sent', makeChatText({user: {name: myName}, say: text}), JSON.stringify({cmd: 'say', say: text}));
+	ws.send(JSON.stringify({cmd: 'say', say: text}));
 	msgInput.value = '';
 	msgInput.focus();
 }

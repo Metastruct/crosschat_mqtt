@@ -146,7 +146,7 @@ All user operations share a single topic `m/<from>/<to>/user`. The `cmd` field i
 
 | Topic | Payload |
 |---|---|
-| `m/<from>/<to>/msg/<user_id>` | `{"msg": "..."}` |
+| `m/<from>/<to>/say/<user_id>` | `{"say": "..."}` |
 
 Sent to each online server (excluding self). On receipt the recipient user is looked up in the local server's user list; if missing a warning is logged.
 
@@ -154,7 +154,7 @@ Sent to each online server (excluding self). On receipt the recipient user is lo
 
 | Topic | Payload |
 |---|---|
-| `m/<from>/<to>/pm/<from_user_id>/<to_user_id>` | `{"msg": "..."}` |
+| `m/<from>/<to>/pm/<from_user_id>/<to_user_id>` | `{"say": "..."}` |
 
 Sent from a specific user on one server to a specific user on another server.
 On receipt the sender and receiver user info is logged.
@@ -196,7 +196,7 @@ The `CrossChat` class wraps the full lifecycle and exposes `CrossChatState` as `
 
 | Method / Attribute | Description |
 |---|---|
-| `CrossChat(config, *, host, port, server_id, console_port, verbose, handler)` | Create instance. `config` can be a dict, file path, or `None` for all-defaults. Keyword args override config values. Optional `handler` receives `on_user(user, cmd, burst)`, `on_msg(user, msg)`, `on_server_add(server)`, `on_server_del(server)`, and `on_server_status(server)` callbacks. |
+| `CrossChat(config, *, host, port, server_id, console_port, verbose, handler)` | Create instance. `config` can be a dict, file path, or `None` for all-defaults. Keyword args override config values. Optional `handler` receives `on_user(user, cmd, burst)`, `on_say(user, say)`, `on_server_add(server)`, `on_server_del(server)`, and `on_server_status(server)` callbacks. |
 | `chat.state` | The underlying `CrossChatState` instance |
 | `await chat.run()` | Connect to MQTT, publish state, listen for messages, start aiomonitor console |
 | `await chat.listen_messages(client, tg)` | Subscribe to MQTT topics and process incoming messages in a task group |
@@ -254,5 +254,5 @@ The `CrossChatUser` class provides a `serialize()` method that returns a JSON-se
 | `status` | Show known servers and their online/users state |
 | `add <name>` | Add a local user (auto-generated id) and broadcast to all servers |
 | `del <id>` | Remove a local user and broadcast removal |
-| `msg <userid> <message>` | Send a message to a user on all online servers |
+| `say <userid> <message>` | Send a message to a user on all online servers |
 | `pm <from_user_id> <target_server_id> <to_user_id> <message>` | Send a private message from a local user to a user on another server |

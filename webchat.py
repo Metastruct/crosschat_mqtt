@@ -28,8 +28,8 @@ class WebchatHandler:
 	async def on_user(self, user: CrossChatUser, cmd: str, burst: BurstFlag = BurstFlag.NONE) -> None:
 		await self._broadcast({'cmd': 'user', 'user': user.serialize(), 'action': cmd})
 
-	async def on_msg(self, user: CrossChatUser, msg: str) -> None:
-		await self._broadcast({'cmd': 'msg', 'user': user.serialize(), 'msg': msg})
+	async def on_say(self, user: CrossChatUser, say: str) -> None:
+		await self._broadcast({'cmd': 'say', 'user': user.serialize(), 'say': say})
 
 	async def on_server_add(self, server: CrossChatServer) -> None:
 		await self._broadcast({'cmd': 'server_add', 'id': server.id})
@@ -38,10 +38,14 @@ class WebchatHandler:
 		await self._broadcast({'cmd': 'server_del', 'id': server.id})
 
 	async def on_server_status(self, server: CrossChatServer) -> None:
-		await self._broadcast({
-			'cmd': 'server_status', 'id': server.id,
-			'online': server.online, 'started': server.started,
-		})
+		await self._broadcast(
+			{
+				'cmd': 'server_status',
+				'id': server.id,
+				'online': server.online,
+				'started': server.started,
+			}
+		)
 
 
 @app.websocket('/ws')
@@ -57,10 +61,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 			'started': srv.started,
 			'meta': srv.meta,
 			'states': srv.states,
-			'users': [
-				{'id': uid, **user.serialize()}
-				for uid, user in srv.users.items()
-			],
+			'users': [{'id': uid, **user.serialize()} for uid, user in srv.users.items()],
 		}
 		for sid, srv in state.servers.items()
 	]
@@ -89,23 +90,23 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 				user = state.servers[state._own_id].users[uid]
 				await handler.on_user(user, 'add')
 
-			elif cmd == 'msg':
+			elif cmd == 'say':
 				if user_id is None:
 					await ws.send_text(json.dumps({'cmd': 'error', 'msg': 'must join first'}))
 					continue
-				msg_text = payload.get('msg', '')
-				if not msg_text:
-					await ws.send_text(json.dumps({'cmd': 'error', 'msg': 'msg required'}))
+				say_text = payload.get('say', '')
+				if not say_text:
+					await ws.send_text(json.dumps({'cmd': 'error', 'msg': 'say required'}))
 					continue
 				for sid, srv in state.servers.items():
 					if sid != state._own_id and srv.online:
 						await state.publish(
-							f'm/{state._own_id}/{sid}/msg/{user_id}',
-							payload=json.dumps({'msg': msg_text}),
+							f'm/{state._own_id}/{sid}/say/{user_id}',
+							payload=json.dumps({'say': say_text}),
 						)
 				user = state.servers[state._own_id].users[user_id]
-				await handler.on_msg(user, msg_text)
-				await ws.send_text(json.dumps({'cmd': 'msg_sent'}))
+				await handler.on_say(user, say_text)
+				await ws.send_text(json.dumps({'cmd': 'say_sent'}))
 
 			else:
 				await ws.send_text(json.dumps({'cmd': 'error', 'msg': f'unknown cmd: {cmd}'}))
