@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import json
 import random
 import sys
 from pathlib import Path
@@ -77,6 +78,11 @@ async def main() -> None:
 		handler=handler,
 	)
 
+	with open(args.config) as f:
+		cfg = json.load(f)
+	webchat_host = cfg.get('webchat_host', '0.0.0.0')
+	webchat_port = cfg.get('webchat_port', 8765)
+
 	async with asyncio.TaskGroup() as tg:
 		fake_user_ids: list[int] = []
 
@@ -94,8 +100,6 @@ async def main() -> None:
 			fake_user_ids.append(uid)
 
 		async def send_messages():
-			import json
-
 			await asyncio.sleep(6)
 			for uid in fake_user_ids:
 				payload = json.dumps({'msg': f'Hello from user {uid}'})
@@ -105,7 +109,7 @@ async def main() -> None:
 							chat.state.publish(f'm/{chat.state._own_id}/{sid}/msg/{uid}', payload=payload)
 						)
 
-		webchat_config = uvicorn.Config(webchat_app, host='127.0.0.1', port=8765, log_level='info')
+		webchat_config = uvicorn.Config(webchat_app, host=webchat_host, port=webchat_port, log_level='info')
 		webchat_server = uvicorn.Server(webchat_config)
 
 		tg.create_task(add_fake(), name='add_fake_user')

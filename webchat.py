@@ -1,6 +1,8 @@
 import json
+from pathlib import Path
 
 from fastapi import FastAPI, WebSocket
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 
@@ -20,3 +22,8 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 				await ws.send_text(json.dumps({'cmd': 'error', 'msg': f'unknown cmd: {cmd}'}))
 	except Exception:
 		pass
+
+
+static_dir = Path(__file__).resolve().parent / 'static'
+if static_dir.is_dir():
+	app.mount('/', StaticFiles(directory=str(static_dir), html=True), name='static')

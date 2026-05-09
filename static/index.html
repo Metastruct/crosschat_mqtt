@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebChat</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #e6edf3; display: flex; flex-direction: column; height: 100vh; padding: 12px; gap: 8px; }
+#status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #8b949e; padding-bottom: 8px; border-bottom: 1px solid #21262d; }
+#status .dot { width: 10px; height: 10px; border-radius: 50%; background: #484f58; }
+#status .dot.connected { background: #3fb950; }
+#status .dot.disconnected { background: #f85149; }
+#log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 4px 0; font-size: 13px; }
+#log::-webkit-scrollbar { width: 6px; }
+#log::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+.entry { display: flex; flex-direction: column; gap: 2px; }
+.entry .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.entry .label.sent { color: #58a6ff; }
+.entry .label.received { color: #3fb950; }
+.entry .label.error { color: #f85149; }
+.entry pre { margin: 0; border-radius: 6px; background: #161b22 !important; }
+.entry pre code { padding: 8px 12px !important; font-size: 12px; background: transparent !important; }
+#input-area { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid #21262d; padding-top: 8px; }
+#input-row { display: flex; gap: 8px; align-items: flex-start; }
+#input { flex: 1; background: #161b22; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', monospace; font-size: 13px; padding: 10px 12px; resize: vertical; min-height: 60px; outline: none; transition: border-color 0.15s; }
+#input:focus { border-color: #58a6ff; }
+#input.invalid { border-color: #f85149; }
+#input.valid { border-color: #3fb950; }
+#validation-msg { font-size: 12px; min-height: 18px; color: #8b949e; }
+#validation-msg.error { color: #f85149; }
+#validation-msg.ok { color: #3fb950; }
+#send { background: #238636; color: #fff; border: none; border-radius: 6px; padding: 10px 20px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
+#send:hover:not(:disabled) { background: #2ea043; }
+#send:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<div id="status">
+	<span class="dot disconnected" id="dot"></span>
+	<span id="status-text">disconnected</span>
+</div>
+
+<div id="log"></div>
+
+<div id="input-area">
+	<div id="input-row">
+		<textarea id="input" placeholder='{"cmd": "echo", "i": 42}' spellcheck="false"></textarea>
+		<button id="send" disabled>Send</button>
+	</div>
+	<div id="validation-msg"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const log = $('log');
+const input = $('input');
+const sendBtn = $('send');
+const dot = $('dot');
+const statusText = $('status-text');
+const validationMsg = $('validation-msg');
+
+let ws = null;
+
+function connect() {
+	ws = new WebSocket('ws://' + location.host + '/ws');
+
+	ws.onopen = () => {
+		dot.className = 'dot connected';
+		statusText.textContent = 'connected';
+	};
+
+	ws.onclose = () => {
+		dot.className = 'dot disconnected';
+		statusText.textContent = 'disconnected';
+		setTimeout(connect, 2000);
+	};
+
+	ws.onerror = () => {
+		dot.className = 'dot disconnected';
+		statusText.textContent = 'error';
+	};
+
+	ws.onmessage = e => {
+		addEntry('received', e.data);
+	};
+}
+
+function addEntry(type, text) {
+	const entry = document.createElement('div');
+	entry.className = 'entry';
+
+	const label = document.createElement('div');
+	label.className = 'label ' + type;
+	label.textContent = type;
+	entry.appendChild(label);
+
+	let pretty;
+	try {
+		pretty = JSON.stringify(JSON.parse(text), null, 2);
+	} catch {
+		pretty = text;
+	}
+
+	const pre = document.createElement('pre');
+	const code = document.createElement('code');
+	code.className = 'language-json';
+	code.textContent = pretty;
+	pre.appendChild(code);
+	entry.appendChild(pre);
+	log.appendChild(entry);
+	log.scrollTop = log.scrollHeight;
+	hljs.highlightElement(code);
+}
+
+function validate(raw) {
+	if (!raw.trim()) {
+		validationMsg.textContent = '';
+		validationMsg.className = '';
+		input.className = '';
+		sendBtn.disabled = true;
+		return null;
+	}
+	try {
+		const parsed = JSON.parse(raw);
+		validationMsg.textContent = 'valid JSON';
+		validationMsg.className = 'ok';
+		input.className = 'valid';
+		sendBtn.disabled = false;
+		return parsed;
+	} catch (e) {
+		validationMsg.textContent = e.message;
+		validationMsg.className = 'error';
+		input.className = 'invalid';
+		sendBtn.disabled = true;
+		return null;
+	}
+}
+
+let debounceTimer = null;
+input.addEventListener('input', () => {
+	clearTimeout(debounceTimer);
+	debounceTimer = setTimeout(() => validate(input.value), 200);
+});
+
+input.addEventListener('keydown', e => {
+	if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+		e.preventDefault();
+		send();
+	}
+});
+
+sendBtn.addEventListener('click', send);
+
+function send() {
+	const payload = input.value.trim();
+	if (!payload) return;
+	const parsed = validate(payload);
+	if (!parsed || !ws || ws.readyState !== WebSocket.OPEN) return;
+	addEntry('sent', payload);
+	ws.send(payload);
+	input.value = '';
+	input.className = '';
+	validationMsg.textContent = '';
+	validationMsg.className = '';
+	sendBtn.disabled = true;
+}
+
+connect();
+</script>
+</body>
+</html>
