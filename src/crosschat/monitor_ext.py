@@ -66,7 +66,7 @@ def do_del(ctx: click.Context, user_id: str) -> None:
 		print_fail(f'User {user_id} not found')
 		return
 	user_name = user.name
-	tg.create_task(state.remove_user(uid))
+	tg.create_task(server.del_user(uid))
 	click.echo(f'User {user_id} ({user_name}) removed')
 
 

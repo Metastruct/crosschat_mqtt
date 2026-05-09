@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -76,4 +77,51 @@ class CrossChatServer:
 				if ensure and not create:
 					log.warning('Created user without networked name', user=user)
 					pass
+		return user
+
+	async def add_user(self, name: str, extra: dict | None = None) -> int:
+		state = self._state
+		if state is None:
+			raise RuntimeError('CrossChatServer has no state reference')
+		user_id = state._next_seq
+		user = CrossChatUser(
+			name=name,
+			first_seen=datetime.now(timezone.utc),
+			server=self,
+			id=user_id,
+			extra=extra or {},
+		)
+		state._next_seq += 1
+		self.users[user_id] = user
+
+		if state._client is not None:
+			user_data = user.serialize()
+			user_data['id'] = user.id
+			user_data['cmd'] = 'add'
+			user_data['burst'] = False
+			payload = json.dumps(user_data)
+			for sid, srv in state.servers.items():
+				if sid != state._own_id and srv.online:
+					await state._client.publish(
+						f'{state._prefix}m/{state._own_id}/{sid}/user',
+						payload=payload,
+						qos=2,
+					)
+		return user_id
+
+	async def del_user(self, user_id: int) -> CrossChatUser | None:
+		state = self._state
+		user = self.users.pop(user_id, None)
+		if user is None:
+			return None
+
+		if state is not None and state._client is not None:
+			payload = json.dumps({'id': user.id, 'cmd': 'del'})
+			for sid, srv in state.servers.items():
+				if sid != state._own_id and srv.online:
+					await state._client.publish(
+						f'{state._prefix}m/{state._own_id}/{sid}/user',
+						payload=payload,
+						qos=2,
+					)
 		return user

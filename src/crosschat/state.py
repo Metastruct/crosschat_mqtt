@@ -91,49 +91,12 @@ class CrossChatState:
 		return user
 
 	async def add_user(self, name: str, extra: dict | None = None) -> int:
-		user_id = self._next_seq
 		server = self._ensure_server(self._own_id)
-		user = CrossChatUser(
-			name=name,
-			first_seen=datetime.now(timezone.utc),
-			server=server,
-			id=user_id,
-			extra=extra or {},
-		)
-		self._next_seq += 1
-		server.users[user_id] = user
+		return await server.add_user(name, extra)
 
-		if self._client is not None:
-			user_data = user.serialize()
-			user_data['id'] = user.id
-			user_data['cmd'] = 'add'
-			user_data['burst'] = False
-			payload = json.dumps(user_data)
-			for sid, srv in self.servers.items():
-				if sid != self._own_id and srv.online:
-					await self._client.publish(
-						f'{self._prefix}m/{self._own_id}/{sid}/user',
-						payload=payload,
-						qos=2,
-					)
-		return user_id
-
-	async def remove_user(self, user_id: int) -> CrossChatUser | None:
+	async def del_user(self, user_id: int) -> CrossChatUser | None:
 		server = self._ensure_server(self._own_id)
-		user = server.users.pop(user_id, None)
-		if user is None:
-			return None
-
-		if self._client is not None:
-			payload = json.dumps({'id': user.id, 'cmd': 'del'})
-			for sid, srv in self.servers.items():
-				if sid != self._own_id and srv.online:
-					await self._client.publish(
-						f'{self._prefix}m/{self._own_id}/{sid}/user',
-						payload=payload,
-						qos=2,
-					)
-		return user
+		return await server.del_user(user_id)
 
 	def subscribe_ooc(self, ooc_name: str, callback: Callable) -> None:
 		if ooc_name not in self._ooc_subscribers:
