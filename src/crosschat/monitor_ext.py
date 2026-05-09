@@ -62,9 +62,14 @@ def do_del(ctx: click.Context, user_id: str) -> None:
 	if state is None or client is None:
 		print_fail('state or client not available')
 		return
-	user = state.remove_user(int(user_id))
+	try:
+		uid = int(user_id)
+	except ValueError:
+		print_fail(f'Invalid user id: {user_id}')
+		return
+	user = state.remove_user(uid)
 	if user is None:
-		click.echo(f'User {user_id} not found')
+		print_fail(f'User {user_id} not found')
 		return
 	payload = json.dumps({})
 	for sid, server in state.servers.items():
@@ -72,7 +77,7 @@ def do_del(ctx: click.Context, user_id: str) -> None:
 			asyncio.create_task(
 				client.publish(f'crosschat/m/{state._own_id}/{sid}/user/{user.id}/remove', payload=payload, qos=2)
 			)
-	click.echo(f'User {user_id} removed')
+	click.echo(f'User {user_id} ({user.name}) removed')
 
 
 @monitor_cli.command(name='msg')
@@ -91,6 +96,16 @@ def do_msg(ctx: click.Context, user_id: str, message: tuple[str, ...]) -> None:
 	if state is None or client is None:
 		print_fail('state or client not available')
 		return
+	try:
+		uid = int(user_id)
+	except ValueError:
+		print_fail(f'Invalid user id: {user_id}')
+		return
+	own_server = state.servers.get(state._own_id)
+	if own_server is None or uid not in own_server.users:
+		print_fail(f'User {user_id} not found')
+		return
+	user = own_server.users[uid]
 	msg_text = ' '.join(message)
 	payload = json.dumps({'msg': msg_text})
 	targets = 0
@@ -98,9 +113,9 @@ def do_msg(ctx: click.Context, user_id: str, message: tuple[str, ...]) -> None:
 		if sid != state._own_id and server.online:
 			targets += 1
 			asyncio.create_task(
-				client.publish(f'crosschat/m/{state._own_id}/{sid}/msg/{user_id}', payload=payload, qos=2)
+				client.publish(f'crosschat/m/{state._own_id}/{sid}/msg/{user.id}', payload=payload, qos=2)
 			)
-	click.echo(f'Message sent to {user_id} on {targets} online server(s)')
+	click.echo(f'Message sent to {user_id} ({user.name}) on {targets} online server(s)')
 
 
 @monitor_cli.command(name='pm')

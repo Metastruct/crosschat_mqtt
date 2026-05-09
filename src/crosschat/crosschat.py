@@ -202,6 +202,7 @@ class CrossChat:
 						log.debug('burst_recv', topic=topic, payload=payload)
 						server = state._ensure_server(from_sid)
 						server.burst_in_progress = False
+						server.burst_completed = True
 						data = json.loads(payload)
 						expected = data.get('user_count')
 						if expected is not None and len(server.users) != expected:
@@ -220,7 +221,7 @@ class CrossChat:
 					log.debug('burst_recv', topic=topic, payload=payload)
 					if from_sid and from_sid != state._own_id:
 						server = state._ensure_server(from_sid)
-						if not server.burst_in_progress:
+						if not server.burst_in_progress and not server.burst_completed:
 							log.error('user_added_before_burst', server_id=from_sid, user_id=user_id)
 						first_seen_str = data.get('first_seen')
 						first_seen = (
@@ -242,7 +243,7 @@ class CrossChat:
 					data = json.loads(payload)
 					server = state.servers.get(from_sid)
 					if server:
-						if not server.burst_in_progress:
+						if not server.burst_in_progress and not server.burst_completed:
 							log.error('user_removed_before_burst', server_id=from_sid, user_id=user_id)
 						if user_id in server.users:
 							del server.users[user_id]
@@ -252,7 +253,7 @@ class CrossChat:
 					data = json.loads(payload)
 					msg_text = data.get('msg', '')
 					server = state._ensure_server(from_sid, ensure=True)
-					if not server.burst_in_progress:
+					if not server.burst_in_progress and not server.burst_completed:
 						log.error('message_received_before_burst', server_id=from_sid, sender_id=sender_id)
 					user = server.get_user(sender_id, ensure=True)
 					log.debug('MESSAGE', sender=user, msg=msg_text)

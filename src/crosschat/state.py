@@ -37,6 +37,9 @@ class CrossChatState:
 	def set_online(self, sid: str, online: bool) -> None:
 		server = self._ensure_server(sid)
 		server.online = online
+		if not online:
+			server.burst_in_progress = False
+			server.burst_completed = False
 
 	def set_meta(self, meta: dict) -> None:
 		self._own_meta = meta
