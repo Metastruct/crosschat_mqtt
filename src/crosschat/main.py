@@ -159,15 +159,22 @@ async def listen_messages(client: aiomqtt.Client, state: CrossChatState) -> None
 										),
 									),
 								)
+						user_count = len(own_server.users) if own_server else 0
 						end_topic = f'crosschat/m/{state._own_id}/{sid}/burst/end'
 						log.debug('send burst end', serverid=sid)
 						tasks.append(
 							asyncio.create_task(
-								client.publish(end_topic, payload='{}', qos=2),
+								client.publish(end_topic, payload=json.dumps({'user_count': user_count}), qos=2),
 							),
 						)
-						await asyncio.gather(*tasks)
-						log.info('burst_sent', server_id=sid, user_count=len(own_server.users) if own_server else 0)
+						try:
+							await asyncio.gather(*tasks)
+						except Exception as e:
+							log.error('burst_failed', server_id=sid, error=str(e))
+							await state.send_ooc(sid, 'error', {'msg': f'burst failed: {e}'})
+							raise
+						else:
+							log.info('burst_sent', server_id=sid, user_count=user_count)
 			elif key == 'meta' and len(parts) == 4:
 				try:
 					meta_data = json.loads(payload)
@@ -188,12 +195,16 @@ async def listen_messages(client: aiomqtt.Client, state: CrossChatState) -> None
 					log.debug('burst_recv', topic=topic, payload=payload)
 					server = state._ensure_server(from_sid)
 					server.burst_in_progress = True
-					log.info('burst_start', server_id=from_sid)
+					log.info('BURST', server_id=from_sid)
 				elif parts[5] == 'end':
 					log.debug('burst_recv', topic=topic, payload=payload)
 					server = state._ensure_server(from_sid)
 					server.burst_in_progress = False
-					log.info('burst_end', server_id=from_sid)
+					data = json.loads(payload)
+					expected = data.get('user_count')
+					if expected is not None and len(server.users) != expected:
+						log.warning('burst_user_count_mismatch', server_id=from_sid, expected=expected, actual=len(server.users))
+					log.info('BURST_END', server_id=from_sid, user_count=len(server.users))
 				else:
 					log.warning('unknown burst message')
 			elif endpoint == 'user' and len(parts) == 6:
@@ -205,7 +216,9 @@ async def listen_messages(client: aiomqtt.Client, state: CrossChatState) -> None
 					if not server.burst_in_progress:
 						log.error('user_added_before_burst', server_id=from_sid, user_id=user_id)
 					first_seen_str = data.get('first_seen')
-					first_seen = datetime.fromisoformat(first_seen_str) if first_seen_str else datetime.now(timezone.utc)
+					first_seen = (
+						datetime.fromisoformat(first_seen_str) if first_seen_str else datetime.now(timezone.utc)
+					)
 					known = {'name', 'first_seen', 'server'}
 					extra = {k: v for k, v in data.items() if k not in known}
 					user = CrossChatUser(
@@ -236,6 +249,10 @@ async def listen_messages(client: aiomqtt.Client, state: CrossChatState) -> None
 					log.error('message_received_before_burst', server_id=from_sid, sender_id=sender_id)
 				user = server.get_user(sender_id, ensure=True)
 				log.debug('MESSAGE', sender=user, msg=msg_text)
+			elif endpoint == 'ooc' and len(parts) == 6:
+				ooc_name = parts[5]
+				server = state._ensure_server(from_sid)
+				await state._notify_ooc(server, ooc_name, payload)
 			else:
 				log.warning('unknown_message_endpoint', topic=topic, endpoint=endpoint)
 
@@ -297,6 +314,11 @@ async def main() -> None:
 		log.info('state_published', topic=f'{prefix}state/{sid}/meta', state=meta_payload)
 		state.set_meta(config.get('meta', {}))
 		state.set_client(client, prefix)
+
+		for level in ('debug', 'warning', 'info'):
+			state.subscribe_ooc(level, lambda server, payload, name, _level=level: getattr(log, _level)(
+				'ooc_log', server_id=server.id, ooc_type=name, payload=payload,
+			))
 
 		loop = asyncio.get_running_loop()
 

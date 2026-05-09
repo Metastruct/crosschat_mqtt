@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -18,6 +19,7 @@ class CrossChatState:
 		self._next_seq: int = 1
 		self._own_meta: dict = {}
 		self._subscribers: dict[str, list[Callable]] = {}
+		self._ooc_subscribers: dict[str, list[Callable]] = {}
 		self._client: Any = None
 		self._prefix: str = 'crosschat/'
 
@@ -27,7 +29,7 @@ class CrossChatState:
 
 	def _ensure_server(self, sid: str, ensure=True) -> CrossChatServer:
 		if sid not in self.servers:
-			self.servers[sid] = CrossChatServer(id=sid)
+			self.servers[sid] = CrossChatServer(id=sid, _state=self)
 			if not ensure:
 				log.warning('Created unknown server', id=sid)
 		return self.servers[sid]
@@ -98,6 +100,22 @@ class CrossChatState:
 	def remove_user(self, user_id: int) -> CrossChatUser | None:
 		server = self._ensure_server(self._own_id)
 		return server.users.pop(user_id, None)
+
+	def subscribe_ooc(self, ooc_name: str, callback: Callable) -> None:
+		if ooc_name not in self._ooc_subscribers:
+			self._ooc_subscribers[ooc_name] = []
+		self._ooc_subscribers[ooc_name].append(callback)
+
+	async def send_ooc(self, target_sid: str, ooc_name: str, payload: Any) -> None:
+		if self._client is None:
+			return
+		topic = f'{self._prefix}m/{self._own_id}/{target_sid}/ooc/{ooc_name}'
+		await self._client.publish(topic, payload=payload if isinstance(payload, str) else json.dumps(payload), qos=2)
+
+	async def _notify_ooc(self, server: CrossChatServer, ooc_name: str, payload: str) -> None:
+		if ooc_name in self._ooc_subscribers:
+			for cb in self._ooc_subscribers[ooc_name]:
+				await cb(server, payload, ooc_name)
 
 	def format_status(self) -> str:
 		parts = [f'[Own ID: {self._own_id}]', '']

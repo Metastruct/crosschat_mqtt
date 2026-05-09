@@ -86,17 +86,19 @@ When a server comes online, each already-online server sends all its local users
 | Topic | Payload |
 |---|---|
 | `m/<from>/<to>/burst/start` | `{}` |
-| `m/<from>/<to>/user/<seq>` | `{"id": <seq>, "name": "..."}` |
-| `m/<from>/<to>/burst/end` | `{}` |
+| `m/<from>/<to>/user/<id>` | `{"name": "...", "first_seen": "...", "server": "<sid>"}` |
+| `m/<from>/<to>/burst/end` | `{"user_count": <n>}` |
+
+The `user_count` in burst end lets the receiver verify all users were received; a warning is logged on mismatch. Failure to publish a burst sends an OOC `error` to the target server.
 
 ### User Synchronisation (incremental)
 
 | Topic | Payload |
 |---|---|
-| `m/<from>/<to>/user/<seq>` | `{"id": <seq>, "name": "..."}` |
-| `m/<from>/<to>/user/<seq>/remove` | `{"id": <seq>}` |
+| `m/<from>/<to>/user/<id>` | `{"name": "...", "first_seen": "...", "server": "<sid>"}` |
+| `m/<from>/<to>/user/<id>/remove` | `{}` |
 
-`seq` is a per-server auto-incrementing integer starting at 1. Messages from self are ignored on receipt (matched by `from_server` in topic). User add/remove are published to each online server individually.
+`id` is a per-server auto-incrementing integer starting at 1. The user's `id` is conveyed by the topic, not the payload. Unknown keys in the user payload are stored in `user.extra`. Messages from self are ignored on receipt (matched by `from_server` in topic). User add/remove are published to each online server individually.
 
 ### Messaging
 
@@ -106,6 +108,26 @@ When a server comes online, each already-online server sends all its local users
 
 Sent to each online server (excluding self). On receipt the recipient user is looked up in the local server's user list; if missing a warning is logged.
 
+### Out-of-Character (OOC) Messaging
+
+Servers can exchange arbitrary out-of-band messages via OOC topics:
+
+| Topic | Payload |
+|---|---|
+| `m/<from>/<to>/ooc/<type>` | `<any JSON value>` |
+
+OOC messages are delivered via `state.subscribe_ooc(type, callback)` and sent via
+`state.send_ooc(target_sid, type, payload)` or `server.send_ooc(type, payload)`.
+
+The callback receives `(sender_server: CrossChatServer, payload, ooc_type)`.
+
+```python
+# Log remote debug/warning/info messages locally
+for level in ('debug', 'warning', 'info'):
+    state.subscribe_ooc(level, lambda server, payload, name, _l=level:
+        getattr(log, _l)('ooc_log', server_id=server.id, ooc_type=name, payload=payload))
+```
+
 ### Subscription
 
 Servers subscribe to the following topics:
@@ -113,13 +135,13 @@ Servers subscribe to the following topics:
 | Subscription | Purpose |
 |---|---|
 | `state/+/#` | Receive server presence, metadata, and dynamic state updates |
-| `m/+/<own_server_id>/#` | Receive all messages, user sync, and bursts destined for this server |
+| `m/+/<own_server_id>/#` | Receive all messages, user sync, bursts, and OOC destined for this server |
 
 Unknown endpoints under `m/+/<own_server_id>/` are logged as warnings.
 
 ## State API
 
-The `CrossChatState` object provides helpers for dynamic state management:
+The `CrossChatState` object provides helpers for dynamic state and OOC management:
 
 | Method | Description |
 |---|---|
@@ -128,6 +150,9 @@ The `CrossChatState` object provides helpers for dynamic state management:
 | `state.get_meta()` | Return own metadata dict |
 | `state.set_meta(meta)` | Set own metadata (called automatically from config on startup) |
 | `state.set_client(client, prefix)` | Wire up MQTT client; without this, `set_state` operates in-memory only |
+| `state.subscribe_ooc(type, callback)` | Register `async def cb(server: CrossChatServer, payload, type: str)` for OOC messages |
+| `state.send_ooc(target_sid, type, payload)` | Send an OOC message to another server |
+| `server.send_ooc(type, payload)` | Convenience wrapper; sends to `server.id` via the owning state |
 
 ### Example
 
@@ -141,6 +166,8 @@ state.subscribe("map", on_map_change)
 ```
 
 All callbacks are dispatched as `asyncio.Task` and receive the originating `CrossChatServer` instance, the state key, and the new value.
+
+The `CrossChatUser` class provides a `serialize()` method that returns a JSON-serializable dict (without `id`, which is conveyed by the MQTT topic). Extra keys received in the payload are stored in `user.extra` as a dict.
 
 ## Commands (aiomonitor REPL)
 
