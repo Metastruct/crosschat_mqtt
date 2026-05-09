@@ -90,23 +90,7 @@ class CrossChatState:
 		server.users[user_id] = user
 		return user
 
-	def add_user(self, user_id: int, name: str) -> CrossChatUser:
-		server = self._ensure_server(self._own_id)
-		user = CrossChatUser(
-			name=name,
-			first_seen=datetime.now(timezone.utc),
-			server=server,
-			id=self._next_seq,
-		)
-		self._next_seq += 1
-		server.users[user_id] = user
-		return user
-
-	def remove_user(self, user_id: int) -> CrossChatUser | None:
-		server = self._ensure_server(self._own_id)
-		return server.users.pop(user_id, None)
-
-	async def add_user_and_broadcast(self, name: str, extra: dict | None = None) -> int:
+	async def add_user(self, name: str, extra: dict | None = None) -> int:
 		user_id = self._next_seq
 		server = self._ensure_server(self._own_id)
 		user = CrossChatUser(
@@ -134,7 +118,7 @@ class CrossChatState:
 					)
 		return user_id
 
-	async def remove_user_and_broadcast(self, user_id: int) -> CrossChatUser | None:
+	async def remove_user(self, user_id: int) -> CrossChatUser | None:
 		server = self._ensure_server(self._own_id)
 		user = server.users.pop(user_id, None)
 		if user is None:

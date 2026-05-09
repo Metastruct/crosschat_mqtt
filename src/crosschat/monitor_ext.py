@@ -36,7 +36,7 @@ def do_add(ctx: click.Context, name: str) -> None:
 		print_fail('state or tg not available')
 		return
 	user_id = state._next_seq
-	tg.create_task(state.add_user_and_broadcast(name))
+	tg.create_task(state.add_user(name))
 	click.echo(f'User {user_id} ({name}) added with seq {user_id}')
 
 
@@ -66,7 +66,7 @@ def do_del(ctx: click.Context, user_id: str) -> None:
 		print_fail(f'User {user_id} not found')
 		return
 	user_name = user.name
-	tg.create_task(state.remove_user_and_broadcast(uid))
+	tg.create_task(state.remove_user(uid))
 	click.echo(f'User {user_id} ({user_name}) removed')
 
 

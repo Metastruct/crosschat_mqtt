@@ -46,8 +46,8 @@ def parse_args() -> argparse.Namespace:
 	return parser.parse_args()
 
 
-async def add_and_broadcast(chat: CrossChat, name: str) -> None:
-	await chat.state.add_user_and_broadcast(name)
+async def add_and_broadcast(chat: CrossChat, name: str) -> int:
+	return await chat.state.add_user(name)
 
 
 async def main() -> None:
@@ -65,19 +65,39 @@ async def main() -> None:
 	_infinite = asyncio.Event()
 
 	async with asyncio.TaskGroup() as tg:
+		fake_user_ids: list[int] = []
+
 		count = random.randint(1, 2)
 		print('adding immediate fake users')
 		for _ in range(count):
 			name = random.choice(FAKE_NAMES)
-			await add_and_broadcast(chat, 'Imm' + name)
+			uid = await add_and_broadcast(chat, 'Imm' + name)
+			fake_user_ids.append(uid)
 
 		async def add_fake():
-
 			await asyncio.sleep(4)
 			print('adding late user')
-			await add_and_broadcast(chat, 'LateUser1')
+			uid = await add_and_broadcast(chat, 'LateUser1')
+			fake_user_ids.append(uid)
+
+		async def send_messages():
+			import json
+
+			await asyncio.sleep(6)
+			for uid in fake_user_ids:
+				payload = json.dumps({'msg': f'Hello from user {uid}'})
+				for sid, server in chat.state.servers.items():
+					if sid != chat.state._own_id and server.online:
+						tg.create_task(
+							chat.state._client.publish(
+								f'crosschat/m/{chat.state._own_id}/{sid}/msg/{uid}',
+								payload=payload,
+								qos=2,
+							)
+						)
 
 		tg.create_task(add_fake(), name='add_fake_user')
+		tg.create_task(send_messages(), name='send_fake_messages')
 		tg.create_task(chat.run(tg), name='crosschat')
 		await _infinite.wait()
 

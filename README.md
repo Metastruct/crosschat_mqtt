@@ -95,10 +95,11 @@ The `from_server` is identified by the topic rather than the payload.
 
 | Topic | Payload | Retained |
 |---|---|---|
-| `state/<server_id>/online` | `"online"` / `"offline"` | Yes (with LWT) |
+| `state/<server_id>/status` | `{"started": <unix timestamp>}` / `{"started": 0}` | Yes (with LWT) |
 | `state/<server_id>/meta` | `{...}` (JSON object) | Yes |
 
-`online` is published on connect; broker auto-publishes `"offline"` via Last Will on disconnect.
+`status` is published on connect with the current unix timestamp; broker auto-publishes `{"started": 0}` via Last Will on disconnect.
+When a server reconnects with a changed `started` timestamp, a new user burst is triggered.
 `meta` is published once on connect with the contents of the `meta` key from config.json.
 
 ### Dynamic State
@@ -112,24 +113,31 @@ Other servers receive these updates and can react via the subscription API.
 
 ### User Burst (on server online)
 
-When a server comes online, each already-online server sends all its local users in a burst:
+When a server comes online (or restarts with a new `started` timestamp), each already-online server sends all its local users. Burst metadata is inlined in each user payload rather than sent as separate messages:
 
 | Topic | Payload |
 |---|---|
-| `m/<from>/<to>/burst/start` | `{}` |
-| `m/<from>/<to>/user/<id>` | `{"name": "...", "first_seen": "...", "server": "<sid>"}` |
-| `m/<from>/<to>/burst/end` | `{"user_count": <n>}` |
+| `m/<from>/<to>/user` | `{"id": <n>, "cmd": "add", "name": "...", "first_seen": "...", "server": "<sid>", "burst": "start" \| true \| "end"}` |
 
-The `user_count` in burst end lets the receiver verify all users were received; a warning is logged on mismatch. Failure to publish a burst sends an OOC `error` to the target server.
+- First user in burst: `"burst": "start"`
+- Last user in burst: `"burst": "end"`
+- Middle users: `"burst": true`
+- Single-user burst: `"burst": "start"`
+
+The receiver uses `cmd` to distinguish add/update/delete.
 
 ### User Synchronisation (incremental)
 
 | Topic | Payload |
 |---|---|
-| `m/<from>/<to>/user/<id>` | `{"name": "...", "first_seen": "...", "server": "<sid>"}` |
-| `m/<from>/<to>/user/<id>/remove` | `{}` |
+| `m/<from>/<to>/user` | `{"id": <n>, "cmd": "add" \| "del" \| "update", "name": "...", "first_seen": "...", "server": "<sid>", "burst": false}` |
 
-`id` is a per-server auto-incrementing integer starting at 1. The user's `id` is conveyed by the topic, not the payload. Unknown keys in the user payload are stored in `user.extra`. Messages from self are ignored on receipt (matched by `from_server` in topic). User add/remove are published to each online server individually.
+All user operations share a single topic `m/<from>/<to>/user`. The `cmd` field indicates the action:
+- `"add"`: create a new user
+- `"del"`: remove a user
+- `"update"`: update an existing user
+
+`id` is a per-server auto-incrementing integer starting at 1. Unknown keys in the user payload are stored in `user.extra`. Messages from self are ignored on receipt (matched by `from_server` in topic). User changes are published to each online server individually.
 
 ### Messaging
 
@@ -185,7 +193,7 @@ The `CrossChat` class wraps the full lifecycle and exposes `CrossChatState` as `
 
 | Method / Attribute | Description |
 |---|---|
-| `CrossChat(config, *, host, port, server_id, console_port, verbose)` | Create instance. `config` can be a dict, file path, or `None` for all-defaults. Keyword args override config values. |
+| `CrossChat(config, *, host, port, server_id, console_port, verbose, handler)` | Create instance. `config` can be a dict, file path, or `None` for all-defaults. Keyword args override config values. Optional `handler` receives `on_user(user, cmd)` and `on_msg(user, msg)` callbacks. |
 | `chat.state` | The underlying `CrossChatState` instance |
 | `await chat.run()` | Connect to MQTT, publish state, listen for messages, start aiomonitor console |
 | `await chat.listen_messages(client, tg)` | Subscribe to MQTT topics and process incoming messages in a task group |
@@ -220,7 +228,7 @@ chat.state.subscribe('map', on_map_change)
 
 All callbacks are dispatched as `asyncio.Task` and receive the originating `CrossChatServer` instance, the state key, and the new value.
 
-The `CrossChatUser` class provides a `serialize()` method that returns a JSON-serializable dict (without `id`, which is conveyed by the MQTT topic). Extra keys received in the payload are stored in `user.extra` as a dict.
+The `CrossChatUser` class provides a `serialize()` method that returns a JSON-serializable dict. Extra keys received in the payload are stored in `user.extra` as a dict.
 
 ## Commands (aiomonitor REPL)
 
