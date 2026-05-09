@@ -1,4 +1,3 @@
-import asyncio
 import json
 
 import click
@@ -32,11 +31,12 @@ def do_add(ctx: click.Context, name: str) -> None:
 	"""
 	monitor = ctx.obj
 	state = monitor.console_locals.get('state')
-	if state is None:
-		print_fail('state not available')
+	tg = monitor.console_locals.get('tg')
+	if state is None or tg is None:
+		print_fail('state or tg not available')
 		return
 	user_id = state._next_seq
-	asyncio.create_task(state.add_user_and_broadcast(name))
+	tg.create_task(state.add_user_and_broadcast(name))
 	click.echo(f'User {user_id} ({name}) added with seq {user_id}')
 
 
@@ -51,8 +51,9 @@ def do_del(ctx: click.Context, user_id: str) -> None:
 	"""
 	monitor = ctx.obj
 	state = monitor.console_locals.get('state')
-	if state is None:
-		print_fail('state not available')
+	tg = monitor.console_locals.get('tg')
+	if state is None or tg is None:
+		print_fail('state or tg not available')
 		return
 	try:
 		uid = int(user_id)
@@ -65,7 +66,7 @@ def do_del(ctx: click.Context, user_id: str) -> None:
 		print_fail(f'User {user_id} not found')
 		return
 	user_name = user.name
-	asyncio.create_task(state.remove_user_and_broadcast(uid))
+	tg.create_task(state.remove_user_and_broadcast(uid))
 	click.echo(f'User {user_id} ({user_name}) removed')
 
 
@@ -82,8 +83,9 @@ def do_msg(ctx: click.Context, user_id: str, message: tuple[str, ...]) -> None:
 	monitor = ctx.obj
 	state = monitor.console_locals.get('state')
 	client = monitor.console_locals.get('client')
-	if state is None or client is None:
-		print_fail('state or client not available')
+	tg = monitor.console_locals.get('tg')
+	if state is None or client is None or tg is None:
+		print_fail('state, client or tg not available')
 		return
 	try:
 		uid = int(user_id)
@@ -101,7 +103,7 @@ def do_msg(ctx: click.Context, user_id: str, message: tuple[str, ...]) -> None:
 	for sid, server in state.servers.items():
 		if sid != state._own_id and server.online:
 			targets += 1
-			asyncio.create_task(
+			tg.create_task(
 				client.publish(f'crosschat/m/{state._own_id}/{sid}/msg/{user.id}', payload=payload, qos=2)
 			)
 	click.echo(f'Message sent to {user_id} ({user.name}) on {targets} online server(s)')
@@ -122,13 +124,14 @@ def do_pm(ctx: click.Context, from_user_id: str, target_server_id: str, to_user_
 	monitor = ctx.obj
 	state = monitor.console_locals.get('state')
 	client = monitor.console_locals.get('client')
-	if state is None or client is None:
-		print_fail('state or client not available')
+	tg = monitor.console_locals.get('tg')
+	if state is None or client is None or tg is None:
+		print_fail('state, client or tg not available')
 		return
 	msg_text = ' '.join(message)
 	payload = json.dumps({'msg': msg_text})
 	topic = f'crosschat/m/{state._own_id}/{target_server_id}/pm/{from_user_id}/{to_user_id}'
-	asyncio.create_task(
+	tg.create_task(
 		client.publish(topic, payload=payload, qos=2)
 	)
 	click.echo(f'PM sent from {from_user_id} to {target_server_id}/{to_user_id}')

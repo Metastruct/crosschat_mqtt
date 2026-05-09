@@ -296,6 +296,7 @@ class CrossChat:
 		console_enabled = config.get('console_enabled', True)
 
 		self.state.set_own_id(sid)
+		self.state.set_task_group(tg)
 
 		will = aiomqtt.Will(
 			topic=f'{prefix}state/{sid}/online',
@@ -357,6 +358,7 @@ class CrossChat:
 				'state': self.state,
 				'status': status,
 				'client': client,
+				'tg': tg,
 			}
 			if console_enabled:
 				monitor = aiomonitor.start_monitor(

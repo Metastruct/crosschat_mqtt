@@ -22,6 +22,7 @@ class CrossChatState:
 		self._ooc_subscribers: dict[str, list[Callable]] = {}
 		self._client: Any = None
 		self._prefix: str = 'crosschat/'
+		self._tg: asyncio.TaskGroup | None = None
 
 	def set_own_id(self, sid: str) -> None:
 		self._own_id = sid
@@ -53,11 +54,14 @@ class CrossChatState:
 		self._client = client
 		self._prefix = prefix
 
+	def set_task_group(self, tg: asyncio.TaskGroup) -> None:
+		self._tg = tg
+
 	def set_state(self, key: str, value: str) -> None:
 		server = self._ensure_server(self._own_id)
 		server.states[key] = value
-		if self._client is not None:
-			asyncio.create_task(self._publish_state(key, value))
+		if self._client is not None and self._tg is not None:
+			self._tg.create_task(self._publish_state(key, value))
 		self._notify(server, key, value)
 
 	def subscribe(self, key: str, callback: Callable) -> None:
@@ -66,9 +70,9 @@ class CrossChatState:
 		self._subscribers[key].append(callback)
 
 	def _notify(self, server: CrossChatServer, key: str, value: str) -> None:
-		if key in self._subscribers:
+		if key in self._subscribers and self._tg is not None:
 			for cb in self._subscribers[key]:
-				asyncio.create_task(cb(server, key, value))
+				self._tg.create_task(cb(server, key, value))
 
 	async def _publish_state(self, key: str, value: str) -> None:
 		if self._client is None:
