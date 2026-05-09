@@ -4,6 +4,7 @@ import json
 import logging
 import signal
 import sys
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -50,6 +51,72 @@ def setup_logging(verbose: bool) -> None:
 log = structlog.get_logger()
 
 
+async def run_local_console(monitor: aiomonitor.Monitor) -> None:
+	import shlex
+	from contextvars import copy_context
+
+	import click
+	from prompt_toolkit import PromptSession
+	from prompt_toolkit.formatted_text import FormattedText
+
+	from aiomonitor.context import command_done, current_monitor, current_stdout
+	from aiomonitor.termui.commands import monitor_cli
+	from aiomonitor.termui.completion import ClickCompleter
+
+	prompt_session = PromptSession(
+		completer=ClickCompleter(monitor_cli),
+		complete_while_typing=False,
+	)
+
+	cm_token = current_monitor.set(monitor)
+	cs_token = current_stdout.set(sys.stdout)
+
+	try:
+		while True:
+			try:
+				user_input = (
+					await prompt_session.prompt_async(
+						FormattedText([('#5fd7ff bold', monitor.prompt)]),
+					)
+				).strip()
+			except EOFError:
+				break  # no terminal?
+			except asyncio.CancelledError:
+				raise
+			except KeyboardInterrupt:
+				raise asyncio.CancelledError('ctrl+c')
+
+			if not user_input:
+				continue
+
+			cd_event = asyncio.Event()
+			cd_token = command_done.set(cd_event)
+			try:
+				args = shlex.split(user_input)
+				term_size = prompt_session.output.get_size()
+				ctx = copy_context()
+				ctx.run(
+					monitor_cli.main,
+					args,
+					prog_name='',
+					obj=monitor,
+					standalone_mode=False,
+					max_content_width=term_size.columns,
+				)
+				await cd_event.wait()
+			except (click.BadParameter, click.UsageError) as e:
+				click.echo(str(e))
+			except asyncio.CancelledError:
+				break
+			except Exception:
+				traceback.print_exc()
+			finally:
+				command_done.reset(cd_token)
+	finally:
+		current_stdout.reset(cs_token)
+		current_monitor.reset(cm_token)
+
+
 async def listen_messages(client: aiomqtt.Client, state: CrossChatState) -> None:
 	await client.subscribe('crosschat/state/+/online')
 	await client.subscribe('crosschat/m/+/user/+')
@@ -82,7 +149,13 @@ async def listen_messages(client: aiomqtt.Client, state: CrossChatState) -> None
 				)
 				server.users[user_id] = user
 				log.info('user_added', server_id=sid, user_id=user_id, name=user.name)
-		elif len(parts) == 6 and parts[0] == 'crosschat' and parts[1] == 'm' and parts[3] == 'user' and parts[5] == 'remove':
+		elif (
+			len(parts) == 6
+			and parts[0] == 'crosschat'
+			and parts[1] == 'm'
+			and parts[3] == 'user'
+			and parts[5] == 'remove'
+		):
 			data = json.loads(payload)
 			sid = data.get('server_id', '')
 			user_id = data['id']
@@ -148,8 +221,6 @@ async def main() -> None:
 		)
 		log.info('state_published', topic=f'{prefix}state/{sid}/online', state='online')
 
-		listener = asyncio.create_task(listen_messages(client, state))
-
 		loop = asyncio.get_running_loop()
 
 		class _Status:
@@ -160,33 +231,26 @@ async def main() -> None:
 				return state.format_status()
 
 		status = _Status()
-		with aiomonitor.start_monitor(
+		console_locals = {
+			'state': state,
+			'status': status,
+			'client': client,
+		}
+		monitor = aiomonitor.start_monitor(
 			loop=loop,
 			host=console_host,
 			port=0,
 			console_port=console_port,
 			webui_port=0,
-			locals={
-				'state': state,
-				'status': status,
-				'client': client,
-			},
-		):
-			stop_event = asyncio.Event()
-			try:
-				loop.add_signal_handler(signal.SIGINT, stop_event.set)
-				loop.add_signal_handler(signal.SIGTERM, stop_event.set)
-			except NotImplementedError:
-				pass
+			locals=console_locals,
+		)
+		async with asyncio.TaskGroup() as tg:
+			tg.create_task(listen_messages(client, state), name='mqtt_listener')
 
-			log.info('running', server_id=sid)
-			await stop_event.wait()
+			with monitor:
+				tg.create_task(run_local_console(monitor), name='local_console')
 
-		listener.cancel()
-		try:
-			await listener
-		except asyncio.CancelledError:
-			pass
+				log.info('running', server_id=sid)
 
 	log.info('shutdown', server_id=sid)
 
