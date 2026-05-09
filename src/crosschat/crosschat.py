@@ -403,6 +403,7 @@ class CrossChat:
 				'client': client,
 				'tg': tg,
 				'shutdown': self.shutdown,
+				'handler': self._handler,
 			}
 			if console_enabled:
 				monitor = aiomonitor.start_monitor(

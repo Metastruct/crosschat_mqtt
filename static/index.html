@@ -11,31 +11,53 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #e6edf3; display: flex; flex-direction: column; height: 100vh; padding: 12px; gap: 8px; }
 #status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #8b949e; padding-bottom: 8px; border-bottom: 1px solid #21262d; }
-#status .dot { width: 10px; height: 10px; border-radius: 50%; background: #484f58; }
+#status .dot { width: 10px; height: 10px; border-radius: 50%; background: #484f58; flex-shrink: 0; }
 #status .dot.connected { background: #3fb950; }
 #status .dot.disconnected { background: #f85149; }
-#log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 4px 0; font-size: 13px; }
+#log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding: 4px 0; font-size: 13px; }
 #log::-webkit-scrollbar { width: 6px; }
 #log::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
-.entry { display: flex; flex-direction: column; gap: 2px; }
-.entry .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-.entry .label.sent { color: #58a6ff; }
-.entry .label.received { color: #3fb950; }
-.entry .label.error { color: #f85149; }
-.entry pre { margin: 0; border-radius: 6px; background: #161b22 !important; }
-.entry pre code { padding: 8px 12px !important; font-size: 12px; background: transparent !important; }
-#input-area { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid #21262d; padding-top: 8px; }
-#input-row { display: flex; gap: 8px; align-items: flex-start; }
-#input { flex: 1; background: #161b22; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', monospace; font-size: 13px; padding: 10px 12px; resize: vertical; min-height: 60px; outline: none; transition: border-color 0.15s; }
-#input:focus { border-color: #58a6ff; }
-#input.invalid { border-color: #f85149; }
-#input.valid { border-color: #3fb950; }
-#validation-msg { font-size: 12px; min-height: 18px; color: #8b949e; }
-#validation-msg.error { color: #f85149; }
-#validation-msg.ok { color: #3fb950; }
-#send { background: #238636; color: #fff; border: none; border-radius: 6px; padding: 10px 20px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s; white-space: nowrap; }
-#send:hover:not(:disabled) { background: #2ea043; }
-#send:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+.entry { padding: 4px 8px; border-radius: 6px; background: #161b22; display: flex; flex-direction: column; gap: 2px; }
+.entry .head { font-size: 11px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
+.entry .head .tag { display: inline-block; padding: 0 6px; border-radius: 3px; font-size: 10px; text-transform: uppercase; }
+.entry .head .tag.sent { background: #1f3a5f; color: #58a6ff; }
+.entry .head .tag.received { background: #1f3a2f; color: #3fb950; }
+.entry .head .tag.system { background: #2d1f3a; color: #bc8cff; }
+.entry .head .tag.error { background: #3a1f1f; color: #f85149; }
+.entry .head .time { color: #484f58; font-weight: 400; }
+.entry .body { color: #e6edf3; }
+.entry .body .chat-user { color: #58a6ff; font-weight: 600; }
+.entry .body .chat-msg { color: #e6edf3; }
+.entry .body .info { color: #8b949e; font-style: italic; }
+.entry .body .info strong { color: #e6edf3; font-style: normal; }
+.entry pre { margin: 2px 0 0; border-radius: 4px; background: #0d1117 !important; max-height: 200px; overflow: auto; }
+.entry pre code { padding: 6px 8px !important; font-size: 11px; background: transparent !important; }
+#controls { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #21262d; padding-top: 8px; }
+#join-area { display: flex; gap: 8px; align-items: center; }
+#join-area label { font-size: 13px; color: #8b949e; white-space: nowrap; }
+#join-name { flex: 1; background: #161b22; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-size: 13px; padding: 8px 12px; outline: none; }
+#join-name:focus { border-color: #58a6ff; }
+#join-name:disabled { opacity: 0.4; }
+#join-btn { background: #238636; color: #fff; border: none; border-radius: 6px; padding: 8px 20px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+#join-btn:hover:not(:disabled) { background: #2ea043; }
+#join-btn:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+#joined-info { display: none; gap: 8px; align-items: center; font-size: 13px; color: #8b949e; }
+#joined-info .badge { background: #1f3a2f; color: #3fb950; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+#msg-row { display: flex; gap: 8px; align-items: flex-start; }
+#msg-input { flex: 1; background: #161b22; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; padding: 8px 12px; outline: none; }
+#msg-input:focus { border-color: #58a6ff; }
+#msg-input:disabled { opacity: 0.4; }
+#msg-send { background: #238636; color: #fff; border: none; border-radius: 6px; padding: 8px 20px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+#msg-send:hover:not(:disabled) { background: #2ea043; }
+#msg-send:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+#json-details { }
+#json-details summary { font-size: 12px; color: #484f58; cursor: pointer; padding: 4px 0; user-select: none; }
+#json-details summary:hover { color: #8b949e; }
+#json-area { display: flex; gap: 8px; align-items: flex-start; margin-top: 4px; }
+#json-input { flex: 1; background: #161b22; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', monospace; font-size: 12px; padding: 8px 10px; resize: vertical; min-height: 36px; outline: none; }
+#json-input:focus { border-color: #484f58; }
+#json-send { background: #21262d; color: #8b949e; border: 1px solid #30363d; border-radius: 6px; padding: 8px 16px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+#json-send:hover { background: #30363d; color: #e6edf3; }
 </style>
 </head>
 <body>
@@ -43,28 +65,60 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 <div id="status">
 	<span class="dot disconnected" id="dot"></span>
 	<span id="status-text">disconnected</span>
+	<span style="flex:1"></span>
+	<span id="server-count" style="font-size:11px;color:#484f58"></span>
 </div>
 
 <div id="log"></div>
 
-<div id="input-area">
-	<div id="input-row">
-		<textarea id="input" placeholder='{"cmd": "echo", "i": 42}' spellcheck="false"></textarea>
-		<button id="send" disabled>Send</button>
+<div id="controls">
+	<div id="join-area">
+		<label for="join-name">Name</label>
+		<input id="join-name" placeholder="Enter your name..." maxlength="32">
+		<button id="join-btn">Join</button>
 	</div>
-	<div id="validation-msg"></div>
+
+	<div id="joined-info">
+		<span>Joined as</span>
+		<span class="badge" id="joined-badge">—</span>
+		<button id="leave-btn" style="background:transparent;border:1px solid #30363d;color:#8b949e;border-radius:6px;padding:4px 12px;font-size:11px;cursor:pointer;margin-left:auto">Leave</button>
+	</div>
+
+	<div id="msg-row">
+		<input id="msg-input" placeholder="Type a message..." disabled>
+		<button id="msg-send" disabled>Send</button>
+	</div>
+
+	<details id="json-details">
+		<summary>Raw JSON</summary>
+		<div id="json-area">
+			<textarea id="json-input" placeholder='{"cmd": "echo", "i": 42}' spellcheck="false" rows="1"></textarea>
+			<button id="json-send">Send JSON</button>
+		</div>
+	</details>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
 const log = $('log');
-const input = $('input');
-const sendBtn = $('send');
 const dot = $('dot');
 const statusText = $('status-text');
-const validationMsg = $('validation-msg');
+const serverCount = $('server-count');
+const joinName = $('join-name');
+const joinBtn = $('join-btn');
+const joinArea = $('join-area');
+const joinedInfo = $('joined-info');
+const joinedBadge = $('joined-badge');
+const leaveBtn = $('leave-btn');
+const msgInput = $('msg-input');
+const msgSend = $('msg-send');
+const jsonInput = $('json-input');
+const jsonSend = $('json-send');
 
 let ws = null;
+let joined = false;
+let myUserId = null;
+let myName = '';
 
 function connect() {
 	ws = new WebSocket('ws://' + location.host + '/ws');
@@ -72,11 +126,22 @@ function connect() {
 	ws.onopen = () => {
 		dot.className = 'dot connected';
 		statusText.textContent = 'connected';
+		joinName.disabled = false;
+		joinBtn.disabled = false;
 	};
 
 	ws.onclose = () => {
 		dot.className = 'dot disconnected';
 		statusText.textContent = 'disconnected';
+		joined = false;
+		myUserId = null;
+		myName = '';
+		joinArea.style.display = 'flex';
+		joinedInfo.style.display = 'none';
+		msgInput.disabled = true;
+		msgSend.disabled = true;
+		joinName.disabled = true;
+		joinBtn.disabled = true;
 		setTimeout(connect, 2000);
 	};
 
@@ -86,89 +151,176 @@ function connect() {
 	};
 
 	ws.onmessage = e => {
-		addEntry('received', e.data);
+		handleMessage(e.data);
 	};
 }
 
-function addEntry(type, text) {
+function handleMessage(raw) {
+	let msg;
+	try { msg = JSON.parse(raw); } catch { msg = {}; }
+
+	switch (msg.cmd) {
+		case 'server_list':
+			addEntry('system', 'Connected to ' + msg.servers.length + ' server(s)', raw);
+			serverCount.textContent = msg.servers.length + ' server(s)';
+			break;
+
+		case 'joined':
+			myUserId = msg.user_id;
+			myName = msg.name;
+			joined = true;
+			joinArea.style.display = 'none';
+			joinedInfo.style.display = 'flex';
+			joinedBadge.textContent = msg.name + ' (#' + msg.user_id + ')';
+			msgInput.disabled = false;
+			msgSend.disabled = false;
+			msgInput.focus();
+			addEntry('system', 'Joined as ' + msg.name + ' (user #' + msg.user_id + ')', raw);
+			break;
+
+		case 'user':
+			addEntry('received', makeUserText(msg), raw);
+			break;
+
+		case 'msg':
+			addEntry('received', makeChatText(msg), raw);
+			break;
+
+		case 'msg_sent':
+			addEntry('system', 'Message sent', raw);
+			break;
+
+		case 'echo_reply':
+			addEntry('received', 'Echo reply: i=' + msg.i, raw);
+			break;
+
+		case 'server_add':
+			addEntry('system', 'Server added: ' + msg.id, raw);
+			break;
+
+		case 'server_del':
+			addEntry('system', 'Server removed: ' + msg.id, raw);
+			break;
+
+		case 'server_status':
+			addEntry('system', 'Server ' + msg.id + ' is ' + (msg.online ? 'online' : 'offline'), raw);
+			break;
+
+		case 'error':
+			addEntry('error', 'Error: ' + msg.msg, raw);
+			break;
+
+		default:
+			addEntry('received', 'Unknown message', raw);
+	}
+}
+
+function makeUserText(msg) {
+	const u = msg.user || {};
+	const a = msg.action || '?';
+	const label = {add: 'joined', del: 'left', update: 'updated'}[a] || a;
+	return '<span class="chat-user">' + esc(u.name || '?') + '</span> <span class="info">' + label + '</span>';
+}
+
+function makeChatText(msg) {
+	const u = msg.user || {};
+	return '<span class="chat-user">' + esc(u.name || '?') + ':</span> <span class="chat-msg">' + esc(msg.msg || '') + '</span>';
+}
+
+function esc(s) {
+	const d = document.createElement('div');
+	d.textContent = s;
+	return d.innerHTML;
+}
+
+function addEntry(type, html, raw) {
 	const entry = document.createElement('div');
 	entry.className = 'entry';
 
-	const label = document.createElement('div');
-	label.className = 'label ' + type;
-	label.textContent = type;
-	entry.appendChild(label);
+	const head = document.createElement('div');
+	head.className = 'head';
 
-	let pretty;
-	try {
-		pretty = JSON.stringify(JSON.parse(text), null, 2);
-	} catch {
-		pretty = text;
+	const tag = document.createElement('span');
+	tag.className = 'tag ' + type;
+	tag.textContent = {
+		sent: 'sent', received: 'msg', system: 'sys', error: 'error'
+	}[type] || type;
+	head.appendChild(tag);
+
+	const time = document.createElement('span');
+	time.className = 'time';
+	time.textContent = new Date().toLocaleTimeString();
+	head.appendChild(time);
+
+	entry.appendChild(head);
+
+	const body = document.createElement('div');
+	body.className = 'body';
+	body.innerHTML = html;
+	entry.appendChild(body);
+
+	if (raw) {
+		let pretty;
+		try { pretty = JSON.stringify(JSON.parse(raw), null, 2); } catch { pretty = raw; }
+		const pre = document.createElement('pre');
+		const code = document.createElement('code');
+		code.className = 'language-json';
+		code.textContent = pretty;
+		pre.appendChild(code);
+		entry.appendChild(pre);
+		log.appendChild(entry);
+		hljs.highlightElement(code);
+	} else {
+		log.appendChild(entry);
 	}
 
-	const pre = document.createElement('pre');
-	const code = document.createElement('code');
-	code.className = 'language-json';
-	code.textContent = pretty;
-	pre.appendChild(code);
-	entry.appendChild(pre);
-	log.appendChild(entry);
 	log.scrollTop = log.scrollHeight;
-	hljs.highlightElement(code);
 }
 
-function validate(raw) {
-	if (!raw.trim()) {
-		validationMsg.textContent = '';
-		validationMsg.className = '';
-		input.className = '';
-		sendBtn.disabled = true;
-		return null;
-	}
-	try {
-		const parsed = JSON.parse(raw);
-		validationMsg.textContent = 'valid JSON';
-		validationMsg.className = 'ok';
-		input.className = 'valid';
-		sendBtn.disabled = false;
-		return parsed;
-	} catch (e) {
-		validationMsg.textContent = e.message;
-		validationMsg.className = 'error';
-		input.className = 'invalid';
-		sendBtn.disabled = true;
-		return null;
-	}
+function sendMessage() {
+	const text = msgInput.value.trim();
+	if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+	addEntry('sent', makeChatText({user: {name: myName}, msg: text}), JSON.stringify({cmd: 'msg', msg: text}));
+	ws.send(JSON.stringify({cmd: 'msg', msg: text}));
+	msgInput.value = '';
+	msgInput.focus();
 }
 
-let debounceTimer = null;
-input.addEventListener('input', () => {
-	clearTimeout(debounceTimer);
-	debounceTimer = setTimeout(() => validate(input.value), 200);
+function sendJson() {
+	const text = jsonInput.value.trim();
+	if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+	let parsed;
+	try { parsed = JSON.parse(text); } catch { return; }
+	addEntry('sent', '<code style="color:#8b949e">' + esc(text) + '</code>', text);
+	ws.send(text);
+	jsonInput.value = '';
+}
+
+function doJoin() {
+	const name = joinName.value.trim();
+	if (!name || !ws || ws.readyState !== WebSocket.OPEN) return;
+	joinBtn.disabled = true;
+	ws.send(JSON.stringify({cmd: 'join', name: name}));
+}
+
+joinBtn.addEventListener('click', doJoin);
+joinName.addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
+msgSend.addEventListener('click', sendMessage);
+msgInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(); });
+jsonSend.addEventListener('click', sendJson);
+jsonInput.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) sendJson(); });
+leaveBtn.addEventListener('click', () => {
+	joined = false;
+	myUserId = null;
+	myName = '';
+	joinArea.style.display = 'flex';
+	joinedInfo.style.display = 'none';
+	msgInput.disabled = true;
+	msgSend.disabled = true;
+	joinName.value = '';
+	joinBtn.disabled = false;
+	addEntry('system', 'Left chat');
 });
-
-input.addEventListener('keydown', e => {
-	if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-		e.preventDefault();
-		send();
-	}
-});
-
-sendBtn.addEventListener('click', send);
-
-function send() {
-	const payload = input.value.trim();
-	if (!payload) return;
-	const parsed = validate(payload);
-	if (!parsed || !ws || ws.readyState !== WebSocket.OPEN) return;
-	addEntry('sent', payload);
-	ws.send(payload);
-	input.value = '';
-	input.className = '';
-	validationMsg.textContent = '';
-	validationMsg.className = '';
-	sendBtn.disabled = true;
-}
 
 connect();
 </script>

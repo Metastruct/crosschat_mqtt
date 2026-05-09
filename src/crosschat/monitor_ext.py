@@ -23,6 +23,16 @@ def do_status(ctx: click.Context) -> None:
 	click.echo(state.format_status())
 
 
+async def _do_add(state, handler, name: str) -> None:
+	uid = await state.add_user(name)
+	if handler is not None:
+		server = state.servers.get(state._own_id)
+		if server:
+			user = server.users.get(uid)
+			if user:
+				await handler.on_user(user, 'add')
+
+
 @monitor_cli.command(name='add')
 @click.argument('name')
 @auto_command_done
@@ -38,9 +48,10 @@ def do_add(ctx: click.Context, name: str) -> None:
 	if state is None or tg is None:
 		print_fail('state or tg not available')
 		return
-	user_id = state._next_seq
-	tg.create_task(state.add_user(name))
-	click.echo(f'User {user_id} ({name}) added with seq {user_id}')
+	handler: object | None = monitor.console_locals.get('handler')
+	uid = state._next_seq
+	tg.create_task(_do_add(state, handler, name))
+	click.echo(f'User {uid} ({name}) added with seq {uid}')
 
 
 @monitor_cli.command(name='del')
@@ -109,6 +120,9 @@ def do_msg(ctx: click.Context, user_id: str, message: tuple[str, ...]) -> None:
 			tg.create_task(
 				state.publish(f'm/{state._own_id}/{sid}/msg/{user.id}', payload=payload)
 			)
+	handler: object | None = monitor.console_locals.get('handler')
+	if handler is not None:
+		tg.create_task(handler.on_msg(user, msg_text))
 	click.echo(f'Message sent to {user_id} ({user.name}) on {targets} online server(s)')
 
 

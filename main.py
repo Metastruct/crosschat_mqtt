@@ -9,45 +9,11 @@ import uvicorn
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'src'))
 
-from crosschat import CrossChat, UserCommand
-from crosschat.models import BurstFlag, CrossChatServer, CrossChatUser
-from rich.console import Console
-from webchat import app as webchat_app
-
-
-console = Console(stderr=True)
+from crosschat import CrossChat
+from webchat import WebchatHandler, app as webchat_app
 
 
 FAKE_NAMES = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Hank']
-
-
-class HandlerExample:
-	async def on_user(self, user: CrossChatUser, cmd: str, burst: BurstFlag = BurstFlag.NONE) -> None:
-		style = {
-			UserCommand.ADD: 'green',
-			UserCommand.REMOVE: 'red',
-			UserCommand.UPDATE: 'yellow',
-		}.get(cmd, 'white')
-		action = {
-			UserCommand.ADD: 'added',
-			UserCommand.REMOVE: 'removed',
-			UserCommand.UPDATE: 'updated',
-		}.get(cmd, 'unknown')
-		burst_info = f' [dim](burst={burst.name})[/]' if burst else ''
-		console.print(f'[bold {style}]user {action}[/] [italic]{user}[/]{burst_info}')
-
-	async def on_msg(self, user: CrossChatUser, msg: str) -> None:
-		console.print(f'[bold blue]message[/] [italic]{user}[/]: {msg}')
-
-	async def on_server_add(self, server: CrossChatServer) -> None:
-		console.print(f'[bold green]server added[/] [italic]{server}[/]')
-
-	async def on_server_del(self, server: CrossChatServer) -> None:
-		console.print(f'[bold red]server removed[/] [italic]{server}[/]')
-
-	async def on_server_status(self, server: CrossChatServer) -> None:
-		status = 'online' if server.online else 'offline'
-		console.print(f'[bold cyan]server status[/] [italic]{server}[/] is {status}')
 
 
 def parse_args() -> argparse.Namespace:
@@ -67,7 +33,8 @@ async def add_and_broadcast(chat: CrossChat, name: str) -> int:
 
 async def main() -> None:
 	args = parse_args()
-	handler = HandlerExample()
+	handler = WebchatHandler(webchat_app)
+	webchat_app.state.handler = handler
 	chat = CrossChat(
 		config=args.config,
 		host=args.host,
@@ -108,6 +75,9 @@ async def main() -> None:
 						tg.create_task(
 							chat.state.publish(f'm/{chat.state._own_id}/{sid}/msg/{uid}', payload=payload)
 						)
+				user = chat.state.servers[chat.state._own_id].users.get(uid)
+				if user:
+					tg.create_task(handler.on_msg(user, f'Hello from user {uid}'))
 
 		webchat_app.state.crosschat = chat
 		webchat_config = uvicorn.Config(webchat_app, host=webchat_host, port=webchat_port, log_level='info')
