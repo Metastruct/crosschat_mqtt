@@ -178,23 +178,29 @@ concommand.Add('crosschat_status', function(ply)
 	for sid, server in pairs(servers) do
 		local badge = server.online and 'ONLINE' or 'OFFLINE'
 		local marker = sid == SERVER_ID and ' (self)' or ''
-		local user_count = 0
 
-		for _ in pairs(server.users) do user_count = user_count + 1 end
-
-		MsgN('  ' .. sid .. ': ' .. badge .. marker .. ' (' .. user_count .. ' users)')
-
-		for uid, user in pairs(server.users) do
-			if not user.left then
-				MsgN('\t#' .. uid .. ' ' .. (user.name or '?'))
+		if sid == SERVER_ID then
+			local count = 0
+			for _ in pairs(local_users) do count = count + 1 end
+			MsgN('  ' .. sid .. ': ' .. badge .. marker .. ' (' .. count .. ' users)')
+			for uid, user in pairs(local_users) do
+				if not user.left then
+					MsgN('\t#' .. uid .. ' ' .. (user.name or '?'))
+				end
+			end
+		else
+			local count = 0
+			for _ in pairs(server.users) do count = count + 1 end
+			MsgN('  ' .. sid .. ': ' .. badge .. marker .. ' (' .. count .. ' users)')
+			for uid, user in pairs(server.users) do
+				if not user.left then
+					MsgN('\t#' .. uid .. ' ' .. (user.name or '?'))
+				end
 			end
 		end
 	end
 
-	local local_count = 0
-	for _ in pairs(local_users) do local_count = local_count + 1 end
 	MsgN('')
-	MsgN('[CrossChat] Local users: ' .. local_count)
 	MsgN('[CrossChat] Client subscribers: ' .. #subscribers)
 end)
 
@@ -518,7 +524,7 @@ function on_mqtt(topic, payload)
 		elseif #parts == 3 then
 			get_server(sid).states[key] = payload
 		end
-	elseif parts[1] == 'm' and #parts >= 5 then
+	elseif parts[1] == 'm' and #parts >= 4 then
 		local from_sid = parts[2]
 		local to_sid = parts[3]
 

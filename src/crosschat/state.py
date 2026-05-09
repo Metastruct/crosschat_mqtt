@@ -42,7 +42,7 @@ class CrossChatState:
 		return self.servers[self._own_id]
 
 	def set_status(self, sid: str, started: int) -> None:
-		server = self.me()
+		server = self.servers[sid]
 		server.started = started
 		server.online = started > 0
 
