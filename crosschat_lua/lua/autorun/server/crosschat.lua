@@ -168,6 +168,36 @@ local function clean_subscribers()
 	end
 end
 
+concommand.Add('crosschat_status', function(ply)
+	if ply and IsValid(ply) and not ply:IsAdmin() and not ply:IsSuperAdmin() then return end
+	MsgN('[CrossChat] Server ID: ', SERVER_ID)
+	MsgN('[CrossChat] Topic Prefix: ', TOPIC_PREFIX)
+	MsgN('[CrossChat] MQTT Connected: ', tostring(mq.connected()))
+	MsgN('')
+
+	for sid, server in pairs(servers) do
+		local badge = server.online and 'ONLINE' or 'OFFLINE'
+		local marker = sid == SERVER_ID and ' (self)' or ''
+		local user_count = 0
+
+		for _ in pairs(server.users) do user_count = user_count + 1 end
+
+		MsgN('  ' .. sid .. ': ' .. badge .. marker .. ' (' .. user_count .. ' users)')
+
+		for uid, user in pairs(server.users) do
+			if not user.left then
+				MsgN('\t#' .. uid .. ' ' .. (user.name or '?'))
+			end
+		end
+	end
+
+	local local_count = 0
+	for _ in pairs(local_users) do local_count = local_count + 1 end
+	MsgN('')
+	MsgN('[CrossChat] Local users: ' .. local_count)
+	MsgN('[CrossChat] Client subscribers: ' .. #subscribers)
+end)
+
 hook.Add('Think', Tag, clean_subscribers)
 
 local function sync_player(ply)

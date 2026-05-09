@@ -42,6 +42,28 @@ end
 serverdata = _RAW.serverdata or {}
 local serverdata = serverdata
 
+concommand.Add('crosschat_status', function()
+	MsgN('[CrossChat] Known servers:')
+
+	for _, server in next, serverdata do
+		local count = 0
+		for _ in pairs(server.players) do count = count + 1 end
+		MsgN('  ' .. server.ServerID .. ' (' .. count .. ' players)')
+		local sorted = {}
+		for k, v in pairs(server.players) do
+			table.insert(sorted, v)
+		end
+		table.sort(sorted, function(a, b)
+			return a.UserID > b.UserID
+		end)
+		for _, ply in pairs(sorted) do
+			if not ply.left then
+				MsgN('\t#' .. ply.UserID .. ' ' .. ply.Name .. ' [' .. (ply.SteamID64 or '?') .. ']')
+			end
+		end
+	end
+end)
+
 concommand.Add('statusall', function()
 	for _, server in next, serverdata do
 		MsgN('Server ' .. server.ServerID .. ':')
