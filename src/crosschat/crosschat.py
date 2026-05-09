@@ -16,6 +16,15 @@ from crosschat.state import CrossChatState
 import crosschat.monitor_ext  # noqa: F401
 
 
+from paho.mqtt.properties import Properties
+from paho.mqtt.packettypes import PacketTypes
+
+# 1. Create the properties object for the CONNECT packet
+properties = Properties(PacketTypes.CONNECT)
+# 2. Set the interval (e.g., 3600 seconds for 1 hour)
+properties.SessionExpiryInterval = 9
+
+
 log = structlog.get_logger()
 
 
@@ -325,6 +334,7 @@ class CrossChat:
 			identifier=sid,
 			# clean_session=True,
 			clean_start=True,
+			properties=properties,
 			keepalive=4,
 			protocol=aiomqtt.ProtocolVersion.V5,
 		) as client:
