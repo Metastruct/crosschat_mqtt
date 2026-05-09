@@ -67,6 +67,8 @@ The config file is a JSON document. Example:
 	"server_id": "metatest1",
 	"console_host": "0.0.0.0",
 	"console_port": 20103,
+	"webchat_host": "0.0.0.0",
+	"webchat_port": 8765,
 	"topic_prefix": "crosschat/",
 	"meta": {
 		"link": "steam://connect/164.92.180.157:27015/metaweb"
@@ -79,6 +81,7 @@ The config file is a JSON document. Example:
 | `mqtt.host` / `mqtt.port` | MQTT broker address |
 | `server_id` | Unique ID for this server instance |
 | `console_host` / `console_port` | aiomonitor REPL listen address |
+| `webchat_host` / `webchat_port` | WebSocket webchat server listen address |
 | `topic_prefix` | MQTT topic prefix (default `crosschat/`) |
 | `meta` | Arbitrary metadata published as retained `/meta` state |
 

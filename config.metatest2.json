@@ -6,6 +6,8 @@
 	"server_id": "metatest2",
 	"console_host": "0.0.0.0",
 	"console_port": 20104,
+	"webchat_host": "0.0.0.0",
+	"webchat_port": 8766,
 	"topic_prefix": "crosschat/",
 	"meta": {
 		"link": "steam://connect/164.92.180.157:27015/metaweb"
