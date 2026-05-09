@@ -52,6 +52,14 @@ class CrossChatState:
 		self._client = client
 		self._prefix = prefix
 
+	async def publish(self, topic: str, payload: Any, qos: int = 2, retain: bool = False) -> None:
+		if self._client is None:
+			return
+		full_topic = f'{self._prefix}{topic}'
+		if not isinstance(payload, str):
+			payload = json.dumps(payload)
+		await self._client.publish(full_topic, payload=payload, qos=qos, retain=retain)
+
 	def set_task_group(self, tg: asyncio.TaskGroup) -> None:
 		self._tg = tg
 
@@ -73,10 +81,7 @@ class CrossChatState:
 				self._tg.create_task(cb(server, key, value))
 
 	async def _publish_state(self, key: str, value: str) -> None:
-		if self._client is None:
-			return
-		topic = f'{self._prefix}state/{self._own_id}/{key}'
-		await self._client.publish(topic, payload=str(value), qos=2, retain=True)
+		await self.publish(f'state/{self._own_id}/{key}', payload=str(value), retain=True)
 
 	def get_or_create_user(self, server_id: str, user_id: int) -> CrossChatUser:
 		server = self._ensure_server(server_id)
@@ -104,10 +109,7 @@ class CrossChatState:
 		self._ooc_subscribers[ooc_name].append(callback)
 
 	async def send_ooc(self, target_sid: str, ooc_name: str, payload: Any) -> None:
-		if self._client is None:
-			return
-		topic = f'{self._prefix}m/{self._own_id}/{target_sid}/ooc/{ooc_name}'
-		await self._client.publish(topic, payload=payload if isinstance(payload, str) else json.dumps(payload), qos=2)
+		await self.publish(f'm/{self._own_id}/{target_sid}/ooc/{ooc_name}', payload=payload)
 
 	async def _notify_ooc(self, server: CrossChatServer, ooc_name: str, payload: str) -> None:
 		if ooc_name in self._ooc_subscribers:

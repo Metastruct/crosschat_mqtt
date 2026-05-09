@@ -29,6 +29,8 @@ log = structlog.get_logger()
 
 
 class CrossChat:
+	_init = False
+
 	def __init__(
 		self,
 		config: dict | str | Path | None = None,
@@ -148,10 +150,29 @@ class CrossChat:
 			current_stdout.reset(cs_token)
 			current_monitor.reset(cm_token)
 
-	async def listen_messages(self, client: aiomqtt.Client, tg: asyncio.TaskGroup) -> None:
+	async def init(self, client: aiomqtt.Client):
+		if self._init:
+			return
+		self._init = True
+
 		state = self.state
+		started = self.started
+		sid = self.state._own_id
 		await client.subscribe('crosschat/state/+/#')
 		await client.subscribe(f'crosschat/m/+/{state._own_id}/#')
+
+		await self.state.publish(f'state/{sid}/status', payload={'started': started}, retain=True)
+		log.info('state_published', topic=f'state/{sid}/status', started=started)
+
+		meta_payload = self._config.get('meta', {})
+		await self.state.publish(f'state/{sid}/meta', payload=meta_payload, retain=True)
+		log.info('state_published', topic=f'state/{sid}/meta', state=meta_payload)
+		self.state.set_meta(self._config.get('meta', {}))
+
+	async def listen_messages(self, client: aiomqtt.Client, tg: asyncio.TaskGroup) -> None:
+		await self.init(client)
+
+		state = self.state
 		async for message in client.messages:
 			topic = message.topic.value
 			payload = message.payload.decode()
@@ -187,7 +208,7 @@ class CrossChat:
 						user_count = len(users)
 						for i, user in enumerate(users):
 							serialized = user.serialize()
-							serialized['id'] = user.id
+							serialized['id'] = int(user.id)
 							serialized['cmd'] = 'add'
 							if user_count == 1:
 								serialized['burst'] = 'start'
@@ -201,11 +222,7 @@ class CrossChat:
 							user_topic = f'crosschat/m/{state._own_id}/{sid}/user'
 							log.debug('send add(in burst)', topic=user_topic, payload=user_payload)
 							tg.create_task(
-								client.publish(
-									user_topic,
-									payload=user_payload,
-									qos=2,
-								),
+								state.publish(f'm/{state._own_id}/{sid}/user', payload=user_payload),
 							)
 					user_count = len(own_server.users) if own_server else 0
 					log.info('burst_sent', server_id=sid, user_count=user_count)
@@ -275,6 +292,7 @@ class CrossChat:
 		user = server.get_user(sender_id, ensure=True)
 		log.debug('MESSAGE', sender=user, msg=msg_text)
 		if self._handler is not None:
+			assert user
 			await self._handler.on_msg(user, msg_text)
 
 	async def _handle_ooc_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
@@ -314,11 +332,11 @@ class CrossChat:
 		console_host = config.get('console_host', '127.0.0.1')
 		console_port = config.get('console_port', 20103)
 		console_enabled = config.get('console_enabled', True)
-
+		self.sid = sid
 		self.state.set_own_id(sid)
 		self.state.set_task_group(tg)
 
-		started = int(time.time())
+		self.started = int(time.time())
 		will = aiomqtt.Will(
 			topic=f'{prefix}state/{sid}/status',
 			payload=json.dumps({'started': 0}),
@@ -339,23 +357,6 @@ class CrossChat:
 			protocol=aiomqtt.ProtocolVersion.V5,
 		) as client:
 			log.info('connected', host=host, port=port, server_id=sid)
-			await client.publish(
-				f'{prefix}state/{sid}/status',
-				payload=json.dumps({'started': started}),
-				qos=2,
-				retain=True,
-			)
-			log.info('state_published', topic=f'{prefix}state/{sid}/status', started=started)
-
-			meta_payload = json.dumps(config.get('meta', {}))
-			await client.publish(
-				f'{prefix}state/{sid}/meta',
-				payload=meta_payload,
-				qos=2,
-				retain=True,
-			)
-			log.info('state_published', topic=f'{prefix}state/{sid}/meta', state=meta_payload)
-			self.state.set_meta(config.get('meta', {}))
 			self.state.set_client(client, prefix)
 
 			for level in ('debug', 'warning', 'info'):

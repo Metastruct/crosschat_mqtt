@@ -202,7 +202,7 @@ The `CrossChat` class wraps the full lifecycle and exposes `CrossChatState` as `
 
 ### CrossChatState
 
-The `CrossChatState` object provides helpers for dynamic state and OOC management, accessible via `chat.state`:
+The `CrossChatState` object provides helpers for dynamic state, OOC, user, and publish management, accessible via `chat.state`:
 
 | Method | Description |
 |---|---|
@@ -210,10 +210,24 @@ The `CrossChatState` object provides helpers for dynamic state and OOC managemen
 | `chat.state.subscribe(key, callback)` | Register `async def cb(server: CrossChatServer, key: str, value: str)` for state changes on any server |
 | `chat.state.get_meta()` | Return own metadata dict |
 | `chat.state.set_meta(meta)` | Set own metadata (called automatically from config on startup) |
-| `chat.state.set_client(client, prefix)` | Wire up MQTT client; without this, `set_state` operates in-memory only |
+| `chat.state.set_client(client, prefix)` | Wire up MQTT client and topic prefix; without this, `set_state` operates in-memory only |
+| `chat.state.publish(topic, payload, qos=2, retain=False)` | Publish to `{prefix}{topic}`; non-string payloads are JSON-encoded automatically |
+| `chat.state.add_user(name, extra=None)` | Add a local user and broadcast to all online servers (delegates to `server.add_user`) |
+| `chat.state.del_user(user_id)` | Remove a local user and broadcast removal (delegates to `server.del_user`) |
 | `chat.state.subscribe_ooc(type, callback)` | Register `async def cb(server: CrossChatServer, payload, type: str)` for OOC messages |
 | `chat.state.send_ooc(target_sid, type, payload)` | Send an OOC message to another server |
 | `server.send_ooc(type, payload)` | Convenience wrapper; sends to `server.id` via the owning state |
+
+### CrossChatServer
+
+The `CrossChatServer` class exposes user management with built-in broadcast:
+
+| Method | Description |
+|---|---|
+| `server.add_user(name, extra=None)` | Create a user on this server, assign an auto-incrementing id, and broadcast to all online servers |
+| `server.del_user(user_id)` | Remove a user by id and broadcast the removal |
+| `server.send_ooc(type, payload)` | Send an OOC message to this server |
+| `server.get_user(id, create=False, ensure=False)` | Look up a user by id, optionally creating a placeholder |
 
 ### Example
 

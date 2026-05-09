@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 import structlog
 
 if TYPE_CHECKING:
-    from crosschat.state import CrossChatState
+	from crosschat.state import CrossChatState
 
 log = structlog.get_logger()
 
@@ -22,7 +22,7 @@ class CrossChatUser:
 	id: int = 0
 	extra: dict = field(default_factory=dict)
 
-	def serialize(self):
+	def serialize(self) -> dict[Any, Any]:
 		result = {
 			'name': self.name,
 			'first_seen': self.first_seen.isoformat(),
@@ -32,10 +32,10 @@ class CrossChatUser:
 		return result
 
 	def __repr__(self):
-		return f"CrossChatUser({self.name!r}, server={self.server!r})"
+		return f'CrossChatUser({self.name!r}, server={self.server!r})'
 
 	def __str__(self):
-		return f"<User {self.name} on {self.server.id}>"
+		return f'<User {self.name} on {self.server.id}>'
 
 
 class UserCommand:
@@ -60,10 +60,10 @@ class CrossChatServer:
 	_state: CrossChatState | None = field(default=None, repr=False, compare=False)
 
 	def __repr__(self):
-		return f"CrossChatServer({self.id!r}, users={len(self.users)})"
+		return f'CrossChatServer({self.id!r}, users={len(self.users)})'
 
 	def __str__(self):
-		return f"<Server {self.id}>"
+		return f'<Server {self.id}>'
 
 	async def send_ooc(self, ooc_name: str, payload: Any) -> None:
 		if self._state is not None:
@@ -102,11 +102,7 @@ class CrossChatServer:
 			payload = json.dumps(user_data)
 			for sid, srv in state.servers.items():
 				if sid != state._own_id and srv.online:
-					await state._client.publish(
-						f'{state._prefix}m/{state._own_id}/{sid}/user',
-						payload=payload,
-						qos=2,
-					)
+					await state.publish(f'm/{state._own_id}/{sid}/user', payload=payload)
 		return user_id
 
 	async def del_user(self, user_id: int) -> CrossChatUser | None:
@@ -119,9 +115,5 @@ class CrossChatServer:
 			payload = json.dumps({'id': user.id, 'cmd': 'del'})
 			for sid, srv in state.servers.items():
 				if sid != state._own_id and srv.online:
-					await state._client.publish(
-						f'{state._prefix}m/{state._own_id}/{sid}/user',
-						payload=payload,
-						qos=2,
-					)
+					await state.publish(f'm/{state._own_id}/{sid}/user', payload=payload)
 		return user

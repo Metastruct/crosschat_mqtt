@@ -89,11 +89,7 @@ async def main() -> None:
 				for sid, server in chat.state.servers.items():
 					if sid != chat.state._own_id and server.online:
 						tg.create_task(
-							chat.state._client.publish(
-								f'crosschat/m/{chat.state._own_id}/{sid}/msg/{uid}',
-								payload=payload,
-								qos=2,
-							)
+							chat.state.publish(f'm/{chat.state._own_id}/{sid}/msg/{uid}', payload=payload)
 						)
 
 		tg.create_task(add_fake(), name='add_fake_user')

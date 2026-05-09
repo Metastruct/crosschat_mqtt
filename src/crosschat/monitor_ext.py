@@ -104,7 +104,7 @@ def do_msg(ctx: click.Context, user_id: str, message: tuple[str, ...]) -> None:
 		if sid != state._own_id and server.online:
 			targets += 1
 			tg.create_task(
-				client.publish(f'crosschat/m/{state._own_id}/{sid}/msg/{user.id}', payload=payload, qos=2)
+				state.publish(f'm/{state._own_id}/{sid}/msg/{user.id}', payload=payload)
 			)
 	click.echo(f'Message sent to {user_id} ({user.name}) on {targets} online server(s)')
 
@@ -130,8 +130,7 @@ def do_pm(ctx: click.Context, from_user_id: str, target_server_id: str, to_user_
 		return
 	msg_text = ' '.join(message)
 	payload = json.dumps({'msg': msg_text})
-	topic = f'crosschat/m/{state._own_id}/{target_server_id}/pm/{from_user_id}/{to_user_id}'
 	tg.create_task(
-		client.publish(topic, payload=payload, qos=2)
+		state.publish(f'm/{state._own_id}/{target_server_id}/pm/{from_user_id}/{to_user_id}', payload=payload)
 	)
 	click.echo(f'PM sent from {from_user_id} to {target_server_id}/{to_user_id}')
