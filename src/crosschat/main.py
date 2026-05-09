@@ -212,14 +212,12 @@ async def listen_messages(client: aiomqtt.Client, state: CrossChatState) -> None
 					del server.users[user_id]
 					log.info('user_removed', server_id=from_sid, user_id=user_id)
 			elif endpoint == 'msg' and len(parts) == 6:
-				recipient_id = parts[5]
+				sender_id = int(parts[5])
 				data = json.loads(payload)
 				msg_text = data.get('msg', '')
-				own = state.servers.get(state._own_id)
-				if own and recipient_id in own.users:
-					log.info('msg_received', to_user=recipient_id, msg=msg_text)
-				else:
-					log.warning('msg_user_missing', user_id=recipient_id)
+				server = state._ensure_server(from_sid, ensure=True)
+				user = server.get_user(sender_id, ensure=True)
+				log.debug('MESSAGE', sender=user, msg=msg_text)
 			else:
 				log.warning('unknown_message_endpoint', topic=topic, endpoint=endpoint)
 

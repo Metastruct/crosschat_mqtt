@@ -21,9 +21,11 @@ class CrossChatState:
 		self._own_id = sid
 		self._ensure_server(sid)
 
-	def _ensure_server(self, sid: str) -> CrossChatServer:
+	def _ensure_server(self, sid: str, ensure=True) -> CrossChatServer:
 		if sid not in self.servers:
 			self.servers[sid] = CrossChatServer(id=sid)
+			if not ensure:
+				log.warning('Created unknown server', id=sid)
 		return self.servers[sid]
 
 	def set_online(self, sid: str, online: bool) -> None:
