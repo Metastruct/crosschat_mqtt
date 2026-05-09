@@ -250,16 +250,19 @@ class CrossChat:
 	async def _handle_m_message(self, topic: str, parts: list[str], payload: str) -> None:
 		from_sid = parts[2]
 		endpoint = parts[4]
-		if endpoint == 'user':
-			await self._handle_user_message(from_sid, topic, parts, payload)
-		elif endpoint == 'say' and len(parts) == 6:
-			await self._handle_say_message(from_sid, topic, parts, payload)
-		elif endpoint == 'ooc' and len(parts) == 6:
-			await self._handle_ooc_message(from_sid, topic, parts, payload)
-		elif endpoint == 'pm' and len(parts) == 7:
-			await self._handle_pm_message(from_sid, topic, parts, payload)
-		else:
-			log.warning('unknown_message_endpoint', topic=topic, endpoint=endpoint)
+		try:
+			if endpoint == 'user':
+				await self._handle_user_message(from_sid, topic, parts, payload)
+			elif endpoint == 'say' and len(parts) == 6:
+				await self._handle_say_message(from_sid, topic, parts, payload)
+			elif endpoint == 'ooc' and len(parts) == 6:
+				await self._handle_ooc_message(from_sid, topic, parts, payload)
+			elif endpoint == 'pm' and len(parts) == 7:
+				await self._handle_pm_message(from_sid, topic, parts, payload)
+			else:
+				log.warning('unknown_message_endpoint', topic=topic, endpoint=endpoint)
+		except Exception:
+			log.exception('message_handler_error', topic=topic, endpoint=endpoint)
 
 	async def _handle_user_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
 		state = self.state
