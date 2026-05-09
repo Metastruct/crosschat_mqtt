@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import sys
+import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -159,14 +160,18 @@ class CrossChat:
 		state = self.state
 		sid = parts[2]
 		key = parts[3]
-		if key == 'online':
-			online = payload == 'online'
+		if key == 'status':
 			prev = state.servers.get(sid)
-			prev_online = prev.online if prev else None
-			state.set_online(sid, online)
-			if prev_online != online:
-				log.info('server_state_changed', server_id=sid, online=online)
-				if online and sid != state._own_id:
+			prev_started = prev.started if prev else 0
+			try:
+				data = json.loads(payload)
+				started = data.get('started', 0)
+			except (json.JSONDecodeError, TypeError):
+				started = 0
+			state.set_status(sid, started)
+			if started != prev_started:
+				log.info('server_state_changed', server_id=sid, started=started)
+				if started > 0 and sid != state._own_id:
 					own_server = state.servers.get(state._own_id)
 					if own_server:
 						users = list(own_server.users.values())
@@ -304,9 +309,10 @@ class CrossChat:
 		self.state.set_own_id(sid)
 		self.state.set_task_group(tg)
 
+		started = int(time.time())
 		will = aiomqtt.Will(
-			topic=f'{prefix}state/{sid}/online',
-			payload='offline',
+			topic=f'{prefix}state/{sid}/status',
+			payload=json.dumps({'started': 0}),
 			qos=2,
 			retain=True,
 		)
@@ -324,12 +330,12 @@ class CrossChat:
 		) as client:
 			log.info('connected', host=host, port=port, server_id=sid)
 			await client.publish(
-				f'{prefix}state/{sid}/online',
-				payload='online',
+				f'{prefix}state/{sid}/status',
+				payload=json.dumps({'started': started}),
 				qos=2,
 				retain=True,
 			)
-			log.info('state_published', topic=f'{prefix}state/{sid}/online', state='online')
+			log.info('state_published', topic=f'{prefix}state/{sid}/status', started=started)
 
 			meta_payload = json.dumps(config.get('meta', {}))
 			await client.publish(

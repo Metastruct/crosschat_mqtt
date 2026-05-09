@@ -52,6 +52,7 @@ class CrossChatHandler(Protocol):
 class CrossChatServer:
 	id: str
 	online: bool = False
+	started: int = 0
 	users: dict[int, CrossChatUser] = field(default_factory=dict)
 	states: dict[str, str] = field(default_factory=dict)
 	meta: dict = field(default_factory=dict)

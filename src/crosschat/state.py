@@ -35,9 +35,10 @@ class CrossChatState:
 				log.warning('Created unknown server', id=sid)
 		return self.servers[sid]
 
-	def set_online(self, sid: str, online: bool) -> None:
+	def set_status(self, sid: str, started: int) -> None:
 		server = self._ensure_server(sid)
-		server.online = online
+		server.started = started
+		server.online = started > 0
 
 	def set_meta(self, meta: dict) -> None:
 		self._own_meta = meta
