@@ -4,11 +4,14 @@ import random
 import sys
 from pathlib import Path
 
+import uvicorn
+
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'src'))
 
 from crosschat import CrossChat, UserCommand
 from crosschat.models import BurstFlag, CrossChatServer, CrossChatUser
 from rich.console import Console
+from webchat import app as webchat_app
 
 
 console = Console(stderr=True)
@@ -102,9 +105,13 @@ async def main() -> None:
 							chat.state.publish(f'm/{chat.state._own_id}/{sid}/msg/{uid}', payload=payload)
 						)
 
+		webchat_config = uvicorn.Config(webchat_app, host='127.0.0.1', port=8765, log_level='info')
+		webchat_server = uvicorn.Server(webchat_config)
+
 		tg.create_task(add_fake(), name='add_fake_user')
 		tg.create_task(send_messages(), name='send_fake_messages')
 		tg.create_task(chat.run(tg), name='crosschat')
+		tg.create_task(webchat_server.serve(), name='webchat')
 		await chat.shutdown.wait()
 
 
