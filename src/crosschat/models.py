@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import enum
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -38,6 +39,40 @@ class CrossChatUser:
 		return f'<User {self.name} on {self.server.id}>'
 
 
+class BurstFlag(enum.Enum):
+	NONE = 0
+	STARTEND = 1
+	START = 2
+	END = 3
+	ACTIVE = 4
+
+	def serialize(self) -> bool | str:
+		return {
+			BurstFlag.NONE: False,
+			BurstFlag.STARTEND: 'startend',
+			BurstFlag.START: 'start',
+			BurstFlag.END: 'end',
+			BurstFlag.ACTIVE: True,
+		}[self]
+
+	@classmethod
+	def deserialize(cls, value: Any, default: BurstFlag | None = None) -> BurstFlag:
+		if value is False or value == 'false':
+			return cls.NONE
+		if value is True or value == 'true':
+			return cls.ACTIVE
+		if value == 'startend':
+			return cls.STARTEND
+		if value == 'start':
+			return cls.START
+		if value == 'end':
+			return cls.END
+		return cls.NONE if default is None else default
+
+	def __bool__(self) -> bool:
+		return self is not BurstFlag.NONE
+
+
 class UserCommand:
 	ADD = 'add'
 	REMOVE = 'del'
@@ -45,8 +80,11 @@ class UserCommand:
 
 
 class CrossChatHandler(Protocol):
-	async def on_user(self, user: CrossChatUser, cmd: str) -> None: ...
+	async def on_user(self, user: CrossChatUser, cmd: str, burst: BurstFlag = BurstFlag.NONE) -> None: ...
 	async def on_msg(self, user: CrossChatUser, msg: str) -> None: ...
+	async def on_server_add(self, server: CrossChatServer) -> None: ...
+	async def on_server_del(self, server: CrossChatServer) -> None: ...
+	async def on_server_status(self, server: CrossChatServer) -> None: ...
 
 
 @dataclass
@@ -98,7 +136,7 @@ class CrossChatServer:
 			user_data = user.serialize()
 			user_data['id'] = user.id
 			user_data['cmd'] = 'add'
-			user_data['burst'] = False
+			user_data['burst'] = BurstFlag.NONE.serialize()
 			payload = json.dumps(user_data)
 			for sid, srv in state.servers.items():
 				if sid != state._own_id and srv.online:

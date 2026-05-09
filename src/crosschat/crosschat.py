@@ -10,7 +10,7 @@ import aiomqtt
 import aiomonitor
 import structlog
 
-from crosschat.models import CrossChatHandler, CrossChatUser
+from crosschat.models import BurstFlag, CrossChatHandler, CrossChatUser
 from crosschat.state import CrossChatState
 
 import crosschat.monitor_ext  # noqa: F401
@@ -199,7 +199,15 @@ class CrossChat:
 			except (json.JSONDecodeError, TypeError):
 				started = 0
 			state.set_status(sid, started)
+			server = state.servers.get(sid)
 			if started != prev_started:
+				if self._handler is not None and server is not None:
+					if started > 0:
+						if prev_started == 0:
+							await self._handler.on_server_add(server)
+					else:
+						await self._handler.on_server_del(server)
+					await self._handler.on_server_status(server)
 				log.info('server_state_changed', server_id=sid, started=started)
 				if started > 0 and sid != state._own_id:
 					own_server = state.servers.get(state._own_id)
@@ -211,13 +219,13 @@ class CrossChat:
 							serialized['id'] = int(user.id)
 							serialized['cmd'] = 'add'
 							if user_count == 1:
-								serialized['burst'] = 'start'
+								serialized['burst'] = BurstFlag.STARTEND.serialize()
 							elif i == 0:
-								serialized['burst'] = 'start'
+								serialized['burst'] = BurstFlag.START.serialize()
 							elif i == user_count - 1:
-								serialized['burst'] = 'end'
+								serialized['burst'] = BurstFlag.END.serialize()
 							else:
-								serialized['burst'] = True
+								serialized['burst'] = BurstFlag.ACTIVE.serialize()
 							user_payload = json.dumps(serialized)
 							user_topic = f'crosschat/m/{state._own_id}/{sid}/user'
 							log.debug('send add(in burst)', topic=user_topic, payload=user_payload)
@@ -280,8 +288,9 @@ class CrossChat:
 				)
 				server.users[user_id] = user
 				log.info('user_added', server_id=from_sid, user_id=user_id, name=user.name)
+		burst = BurstFlag.deserialize(data.get('burst'))
 		if self._handler is not None and user is not None and cmd in ('add', 'del', 'update'):
-			await self._handler.on_user(user, cmd)
+			await self._handler.on_user(user, cmd, burst=burst)
 
 	async def _handle_msg_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
 		state = self.state

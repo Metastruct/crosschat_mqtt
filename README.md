@@ -119,18 +119,18 @@ When a server comes online (or restarts with a new `started` timestamp), each al
 |---|---|
 | `m/<from>/<to>/user` | `{"id": <n>, "cmd": "add", "name": "...", "first_seen": "...", "server": "<sid>", "burst": "start" \| true \| "end"}` |
 
-- First user in burst: `"burst": "start"`
-- Last user in burst: `"burst": "end"`
-- Middle users: `"burst": true`
-- Single-user burst: `"burst": "start"`
+- First user in burst: `"burst": "start"` (`BurstFlag.START`)
+- Last user in burst: `"burst": "end"` (`BurstFlag.END`)
+- Middle users: `"burst": true` (`BurstFlag.ACTIVE`)
+- Single-user burst: `"burst": "startend"` (`BurstFlag.STARTEND`)
 
-The receiver uses `cmd` to distinguish add/update/delete.
+The receiver uses `cmd` to distinguish add/update/delete. Inbound burst values are decoded to the `BurstFlag` enum via `BurstFlag.deserialize()`; the `on_user` handler receives a `BurstFlag` parameter.
 
 ### User Synchronisation (incremental)
 
 | Topic | Payload |
 |---|---|
-| `m/<from>/<to>/user` | `{"id": <n>, "cmd": "add" \| "del" \| "update", "name": "...", "first_seen": "...", "server": "<sid>", "burst": false}` |
+| `m/<from>/<to>/user` | `{"id": <n>, "cmd": "add" \| "del" \| "update", "name": "...", "first_seen": "...", "server": "<sid>", "burst": false}` (serialized as `BurstFlag.NONE`, decoded to `BurstFlag.NONE` on receipt) |
 
 All user operations share a single topic `m/<from>/<to>/user`. The `cmd` field indicates the action:
 - `"add"`: create a new user
@@ -193,7 +193,7 @@ The `CrossChat` class wraps the full lifecycle and exposes `CrossChatState` as `
 
 | Method / Attribute | Description |
 |---|---|
-| `CrossChat(config, *, host, port, server_id, console_port, verbose, handler)` | Create instance. `config` can be a dict, file path, or `None` for all-defaults. Keyword args override config values. Optional `handler` receives `on_user(user, cmd)` and `on_msg(user, msg)` callbacks. |
+| `CrossChat(config, *, host, port, server_id, console_port, verbose, handler)` | Create instance. `config` can be a dict, file path, or `None` for all-defaults. Keyword args override config values. Optional `handler` receives `on_user(user, cmd, burst)`, `on_msg(user, msg)`, `on_server_add(server)`, `on_server_del(server)`, and `on_server_status(server)` callbacks. |
 | `chat.state` | The underlying `CrossChatState` instance |
 | `await chat.run()` | Connect to MQTT, publish state, listen for messages, start aiomonitor console |
 | `await chat.listen_messages(client, tg)` | Subscribe to MQTT topics and process incoming messages in a task group |

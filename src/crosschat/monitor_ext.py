@@ -140,13 +140,26 @@ def do_pm(ctx: click.Context, from_user_id: str, target_server_id: str, to_user_
 
 
 @monitor_cli.command(name='exit')
-@monitor_cli.command(name='quit')
 @auto_command_done
 def do_exit(ctx: click.Context) -> None:
 	"""
 	Exit the application.
 
 	Usage: exit
+	"""
+	monitor = ctx.obj
+	shutdown: asyncio.Event | None = monitor.console_locals.get('shutdown')
+	if shutdown is not None:
+		shutdown.set()
+
+
+@monitor_cli.command(name='quit')
+@auto_command_done
+def do_quit(ctx: click.Context) -> None:
+	"""
+	Exit the application.
+
+	Usage: quit
 	"""
 	monitor = ctx.obj
 	shutdown: asyncio.Event | None = monitor.console_locals.get('shutdown')

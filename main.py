@@ -1,14 +1,13 @@
 import argparse
 import asyncio
 import random
-import signal
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'src'))
 
 from crosschat import CrossChat, UserCommand
-from crosschat.models import CrossChatUser
+from crosschat.models import BurstFlag, CrossChatServer, CrossChatUser
 from rich.console import Console
 
 
@@ -19,7 +18,7 @@ FAKE_NAMES = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Hank
 
 
 class HandlerExample:
-	async def on_user(self, user: CrossChatUser, cmd: str) -> None:
+	async def on_user(self, user: CrossChatUser, cmd: str, burst: BurstFlag = BurstFlag.NONE) -> None:
 		style = {
 			UserCommand.ADD: 'green',
 			UserCommand.REMOVE: 'red',
@@ -30,10 +29,21 @@ class HandlerExample:
 			UserCommand.REMOVE: 'removed',
 			UserCommand.UPDATE: 'updated',
 		}.get(cmd, 'unknown')
-		console.print(f'[bold {style}]user {action}[/] [italic]{user}[/]')
+		burst_info = f' [dim](burst={burst.name})[/]' if burst else ''
+		console.print(f'[bold {style}]user {action}[/] [italic]{user}[/]{burst_info}')
 
 	async def on_msg(self, user: CrossChatUser, msg: str) -> None:
 		console.print(f'[bold blue]message[/] [italic]{user}[/]: {msg}')
+
+	async def on_server_add(self, server: CrossChatServer) -> None:
+		console.print(f'[bold green]server added[/] [italic]{server}[/]')
+
+	async def on_server_del(self, server: CrossChatServer) -> None:
+		console.print(f'[bold red]server removed[/] [italic]{server}[/]')
+
+	async def on_server_status(self, server: CrossChatServer) -> None:
+		status = 'online' if server.online else 'offline'
+		console.print(f'[bold cyan]server status[/] [italic]{server}[/] is {status}')
 
 
 def parse_args() -> argparse.Namespace:
@@ -63,9 +73,6 @@ async def main() -> None:
 		verbose=args.verbose,
 		handler=handler,
 	)
-
-	loop = asyncio.get_running_loop()
-	loop.add_signal_handler(signal.SIGINT, chat.shutdown.set)
 
 	async with asyncio.TaskGroup() as tg:
 		fake_user_ids: list[int] = []
