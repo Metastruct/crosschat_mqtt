@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.13.4",
     "rich>=15.0.0",
     "structlog>=25.5.0",
+    "uvicorn>=0.46.0",
 ]
 
 

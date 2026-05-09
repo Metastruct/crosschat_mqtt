@@ -289,6 +289,13 @@ class CrossChat:
 				server.users[user_id] = user
 				log.info('user_added', server_id=from_sid, user_id=user_id, name=user.name)
 		burst = BurstFlag.deserialize(data.get('burst'))
+		if cmd == 'add' and from_sid and from_sid != state._own_id:
+			server = state.servers.get(from_sid)
+			if server is not None:
+				if burst is BurstFlag.START or burst is BurstFlag.STARTEND:
+					server.bursting = True
+				if burst is BurstFlag.END or burst is BurstFlag.STARTEND:
+					server.bursting = False
 		if self._handler is not None and user is not None and cmd in ('add', 'del', 'update'):
 			await self._handler.on_user(user, cmd, burst=burst)
 
