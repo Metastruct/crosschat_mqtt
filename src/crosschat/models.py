@@ -44,8 +44,6 @@ class CrossChatServer:
 	users: dict[int, CrossChatUser] = field(default_factory=dict)
 	states: dict[str, str] = field(default_factory=dict)
 	meta: dict = field(default_factory=dict)
-	burst_in_progress: bool = False
-	burst_completed: bool = False
 	_state: CrossChatState | None = field(default=None, repr=False, compare=False)
 
 	def __repr__(self):

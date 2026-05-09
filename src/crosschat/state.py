@@ -38,9 +38,6 @@ class CrossChatState:
 	def set_online(self, sid: str, online: bool) -> None:
 		server = self._ensure_server(sid)
 		server.online = online
-		if not online:
-			server.burst_in_progress = False
-			server.burst_completed = False
 
 	def set_meta(self, meta: dict) -> None:
 		self._own_meta = meta
@@ -122,11 +119,15 @@ class CrossChatState:
 		server.users[user_id] = user
 
 		if self._client is not None:
-			payload = json.dumps(user.serialize())
+			user_data = user.serialize()
+			user_data['id'] = user.id
+			user_data['cmd'] = 'add'
+			user_data['burst'] = False
+			payload = json.dumps(user_data)
 			for sid, srv in self.servers.items():
 				if sid != self._own_id and srv.online:
 					await self._client.publish(
-						f'{self._prefix}m/{self._own_id}/{sid}/user/{user.id}',
+						f'{self._prefix}m/{self._own_id}/{sid}/user',
 						payload=payload,
 						qos=2,
 					)
@@ -139,11 +140,11 @@ class CrossChatState:
 			return None
 
 		if self._client is not None:
-			payload = json.dumps({})
+			payload = json.dumps({'id': user.id, 'cmd': 'del'})
 			for sid, srv in self.servers.items():
 				if sid != self._own_id and srv.online:
 					await self._client.publish(
-						f'{self._prefix}m/{self._own_id}/{sid}/user/{user.id}/remove',
+						f'{self._prefix}m/{self._own_id}/{sid}/user',
 						payload=payload,
 						qos=2,
 					)

@@ -48,6 +48,10 @@ class CrossChat:
 		if console_port is not None:
 			self._config['console_port'] = console_port
 
+		sid = self._config.get('server_id', '')
+		if sid:
+			self.state.set_own_id(sid)
+
 	def load_config(self, path: Path) -> None:
 		with open(path) as f:
 			self._config = json.load(f)
@@ -147,7 +151,9 @@ class CrossChat:
 			elif parts[1] == 'm' and len(parts) >= 5 and parts[3] == state._own_id:
 				await self._handle_m_message(topic, parts, payload)
 
-	async def _handle_state_message(self, client: aiomqtt.Client, tg: asyncio.TaskGroup, parts: list[str], payload: str) -> None:
+	async def _handle_state_message(
+		self, client: aiomqtt.Client, tg: asyncio.TaskGroup, parts: list[str], payload: str
+	) -> None:
 		state = self.state
 		sid = parts[2]
 		key = parts[3]
@@ -159,16 +165,24 @@ class CrossChat:
 			if prev_online != online:
 				log.info('server_state_changed', server_id=sid, online=online)
 				if online and sid != state._own_id:
-					burst_topic = f'crosschat/m/{state._own_id}/{sid}/burst/start'
-					log.debug('send burst', serverid=sid)
-					tg.create_task(
-						client.publish(burst_topic, payload='{}', qos=2),
-					)
 					own_server = state.servers.get(state._own_id)
 					if own_server:
-						for user in own_server.users.values():
-							user_payload = json.dumps(user.serialize())
-							user_topic = f'crosschat/m/{state._own_id}/{sid}/user/{user.id}'
+						users = list(own_server.users.values())
+						user_count = len(users)
+						for i, user in enumerate(users):
+							serialized = user.serialize()
+							serialized['id'] = user.id
+							serialized['cmd'] = 'add'
+							if user_count == 1:
+								serialized['burst'] = 'start'
+							elif i == 0:
+								serialized['burst'] = 'start'
+							elif i == user_count - 1:
+								serialized['burst'] = 'end'
+							else:
+								serialized['burst'] = True
+							user_payload = json.dumps(serialized)
+							user_topic = f'crosschat/m/{state._own_id}/{sid}/user'
 							log.debug('send add(in burst)', topic=user_topic, payload=user_payload)
 							tg.create_task(
 								client.publish(
@@ -178,11 +192,6 @@ class CrossChat:
 								),
 							)
 					user_count = len(own_server.users) if own_server else 0
-					end_topic = f'crosschat/m/{state._own_id}/{sid}/burst/end'
-					log.debug('send burst end', serverid=sid)
-					tg.create_task(
-						client.publish(end_topic, payload=json.dumps({'user_count': user_count}), qos=2),
-					)
 					log.info('burst_sent', server_id=sid, user_count=user_count)
 		elif key == 'meta' and len(parts) == 4:
 			try:
@@ -198,15 +207,10 @@ class CrossChat:
 			state._notify(server, key, payload)
 
 	async def _handle_m_message(self, topic: str, parts: list[str], payload: str) -> None:
-		state = self.state
 		from_sid = parts[2]
 		endpoint = parts[4]
-		if endpoint == 'burst' and len(parts) == 6:
-			await self._handle_burst_message(from_sid, topic, parts, payload)
-		elif endpoint == 'user' and len(parts) == 6:
-			await self._handle_user_add_message(from_sid, topic, parts, payload)
-		elif endpoint == 'user' and len(parts) == 7 and parts[6] == 'remove':
-			await self._handle_user_remove_message(from_sid, topic, parts, payload)
+		if endpoint == 'user':
+			await self._handle_user_message(from_sid, topic, parts, payload)
 		elif endpoint == 'msg' and len(parts) == 6:
 			await self._handle_msg_message(from_sid, topic, parts, payload)
 		elif endpoint == 'ooc' and len(parts) == 6:
@@ -216,67 +220,32 @@ class CrossChat:
 		else:
 			log.warning('unknown_message_endpoint', topic=topic, endpoint=endpoint)
 
-	async def _handle_burst_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
+	async def _handle_user_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
 		state = self.state
-		if parts[5] == 'start':
-			log.debug('burst_recv', topic=topic, payload=payload)
-			server = state._ensure_server(from_sid)
-			server.burst_in_progress = True
-			log.info('BURST', server_id=from_sid)
-		elif parts[5] == 'end':
-			log.debug('burst_recv', topic=topic, payload=payload)
-			server = state._ensure_server(from_sid)
-			server.burst_in_progress = False
-			server.burst_completed = True
-			data = json.loads(payload)
-			expected = data.get('user_count')
-			if expected is not None and len(server.users) != expected:
-				log.warning(
-					'burst_user_count_mismatch',
-					server_id=from_sid,
-					expected=expected,
-					actual=len(server.users),
-				)
-			log.info('BURST_END', server_id=from_sid, user_count=len(server.users))
-		else:
-			log.warning('unknown burst message')
-
-	async def _handle_user_add_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
-		state = self.state
-		user_id = int(parts[5])
 		data = json.loads(payload)
-		log.debug('burst_recv', topic=topic, payload=payload)
+		user_id = data.get('id')
+		cmd = data.get('cmd', 'add')
+		log.debug('user_message', topic=topic, payload=payload)
 		if from_sid and from_sid != state._own_id:
 			server = state._ensure_server(from_sid)
-			if not server.burst_in_progress and not server.burst_completed:
-				log.error('user_added_before_burst', server_id=from_sid, user_id=user_id)
-			first_seen_str = data.get('first_seen')
-			first_seen = (
-				datetime.fromisoformat(first_seen_str) if first_seen_str else datetime.now(timezone.utc)
-			)
-			known = {'name', 'first_seen', 'server'}
-			extra = {k: v for k, v in data.items() if k not in known}
-			user = CrossChatUser(
-				name=data.get('name', ''),
-				id=user_id,
-				first_seen=first_seen,
-				server=server,
-				extra=extra,
-			)
-			server.users[user_id] = user
-			log.info('user_added', server_id=from_sid, user_id=user_id, name=user.name)
-
-	async def _handle_user_remove_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
-		state = self.state
-		user_id = int(parts[5])
-		data = json.loads(payload)
-		server = state.servers.get(from_sid)
-		if server:
-			if not server.burst_in_progress and not server.burst_completed:
-				log.error('user_removed_before_burst', server_id=from_sid, user_id=user_id)
-			if user_id in server.users:
-				del server.users[user_id]
-				log.info('user_removed', server_id=from_sid, user_id=user_id)
+			if cmd == 'del':
+				if user_id in server.users:
+					del server.users[user_id]
+					log.info('user_removed', server_id=from_sid, user_id=user_id)
+			else:
+				first_seen_str = data.get('first_seen')
+				first_seen = datetime.fromisoformat(first_seen_str) if first_seen_str else datetime.now(timezone.utc)
+				known = {'name', 'first_seen', 'server', 'burst', 'cmd', 'id'}
+				extra = {k: v for k, v in data.items() if k not in known}
+				user = CrossChatUser(
+					name=data.get('name', ''),
+					id=user_id,
+					first_seen=first_seen,
+					server=server,
+					extra=extra,
+				)
+				server.users[user_id] = user
+				log.info('user_added', server_id=from_sid, user_id=user_id, name=user.name)
 
 	async def _handle_msg_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
 		state = self.state
@@ -284,8 +253,6 @@ class CrossChat:
 		data = json.loads(payload)
 		msg_text = data.get('msg', '')
 		server = state._ensure_server(from_sid, ensure=True)
-		if not server.burst_in_progress and not server.burst_completed:
-			log.error('message_received_before_burst', server_id=from_sid, sender_id=sender_id)
 		user = server.get_user(sender_id, ensure=True)
 		log.debug('MESSAGE', sender=user, msg=msg_text)
 
@@ -343,6 +310,10 @@ class CrossChat:
 			port=port,
 			will=will,
 			identifier=sid,
+			# clean_session=True,
+			clean_start=True,
+			keepalive=4,
+			protocol=aiomqtt.ProtocolVersion.V5,
 		) as client:
 			log.info('connected', host=host, port=port, server_id=sid)
 			await client.publish(
