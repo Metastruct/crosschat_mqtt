@@ -118,7 +118,7 @@ async def run_local_console(monitor: aiomonitor.Monitor) -> None:
 
 
 async def listen_messages(client: aiomqtt.Client, state: CrossChatState) -> None:
-	await client.subscribe('crosschat/state/+/online')
+	await client.subscribe('crosschat/state/+/#')
 	await client.subscribe(f'crosschat/m/+/{state._own_id}/#')
 	async for message in client.messages:
 		topic = message.topic.value
@@ -126,9 +126,10 @@ async def listen_messages(client: aiomqtt.Client, state: CrossChatState) -> None
 		parts = topic.split('/')
 		if parts[0] != 'crosschat':
 			continue
-		if parts[1] == 'state':
-			if len(parts) >= 4 and parts[3] == 'online':
-				sid = parts[2]
+		if parts[1] == 'state' and len(parts) >= 4:
+			sid = parts[2]
+			key = parts[3]
+			if key == 'online':
 				online = payload == 'online'
 				prev = state.servers.get(sid)
 				prev_online = prev.online if prev else None
@@ -136,42 +137,63 @@ async def listen_messages(client: aiomqtt.Client, state: CrossChatState) -> None
 				if prev_online != online:
 					log.info('server_state_changed', server_id=sid, online=online)
 					if online and sid != state._own_id:
+						burst_topic = f'crosschat/m/{state._own_id}/{sid}/burst/start'
+						log.debug('burst_pub', topic=burst_topic, payload='{}')
 						tasks = [
 							asyncio.create_task(
-								client.publish(f'crosschat/m/{state._own_id}/{sid}/burst/start', payload='{}', qos=1),
+								client.publish(burst_topic, payload='{}', qos=1),
 							),
 						]
 						own_server = state.servers.get(state._own_id)
 						if own_server:
 							for user in own_server.users.values():
 								user_payload = json.dumps({'id': user.id, 'name': user.name})
+								user_topic = f'crosschat/m/{state._own_id}/{sid}/user/{user.id}'
+								log.debug('burst_pub', topic=user_topic, payload=user_payload)
 								tasks.append(
 									asyncio.create_task(
 										client.publish(
-											f'crosschat/m/{state._own_id}/{sid}/user/{user.id}',
+											user_topic,
 											payload=user_payload,
 											qos=1,
 										),
 									),
 								)
+						end_topic = f'crosschat/m/{state._own_id}/{sid}/burst/end'
+						log.debug('burst_pub', topic=end_topic, payload='{}')
 						tasks.append(
 							asyncio.create_task(
-								client.publish(f'crosschat/m/{state._own_id}/{sid}/burst/end', payload='{}', qos=1),
+								client.publish(end_topic, payload='{}', qos=1),
 							),
 						)
 						await asyncio.gather(*tasks)
 						log.info('burst_sent', server_id=sid, user_count=len(own_server.users) if own_server else 0)
+			elif key == 'meta' and len(parts) == 4:
+				try:
+					meta_data = json.loads(payload)
+				except json.JSONDecodeError:
+					meta_data = {}
+				server = state._ensure_server(sid)
+				server.meta = meta_data
+				log.info('server_meta_updated', server_id=sid, meta=meta_data)
+			else:
+				server = state._ensure_server(sid)
+				server.states[key] = payload
+				state._notify(server, key, payload)
 		elif parts[1] == 'm' and len(parts) >= 5 and parts[3] == state._own_id:
 			from_sid = parts[2]
 			endpoint = parts[4]
 			if endpoint == 'burst' and len(parts) == 6:
 				if parts[5] == 'start':
+					log.debug('burst_recv', topic=topic, payload=payload)
 					log.info('burst_start', server_id=from_sid)
 				elif parts[5] == 'end':
+					log.debug('burst_recv', topic=topic, payload=payload)
 					log.info('burst_end', server_id=from_sid)
 			elif endpoint == 'user' and len(parts) == 6:
 				data = json.loads(payload)
 				user_id = data['id']
+				log.debug('burst_recv', topic=topic, payload=payload)
 				if from_sid and from_sid != state._own_id:
 					server = state._ensure_server(from_sid)
 					user = CrossChatUser(
@@ -248,6 +270,17 @@ async def main() -> None:
 			retain=True,
 		)
 		log.info('state_published', topic=f'{prefix}state/{sid}/online', state='online')
+
+		meta_payload = json.dumps(config.get('meta', {}))
+		await client.publish(
+			f'{prefix}state/{sid}/meta',
+			payload=meta_payload,
+			qos=1,
+			retain=True,
+		)
+		log.info('state_published', topic=f'{prefix}state/{sid}/meta', state=meta_payload)
+		state.set_meta(config.get('meta', {}))
+		state.set_client(client, prefix)
 
 		loop = asyncio.get_running_loop()
 

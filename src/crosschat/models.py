@@ -17,3 +17,5 @@ class CrossChatServer:
 	id: str
 	online: bool = False
 	users: dict[str, CrossChatUser] = field(default_factory=dict)
+	states: dict[str, str] = field(default_factory=dict)
+	meta: dict = field(default_factory=dict)
