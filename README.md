@@ -9,10 +9,12 @@ Game server cross-chat via MQTT.
 
 ## Usage
 
+### CLI
+
 ```sh
-PYTHONPATH=src uv run python -m crosschat.main
-PYTHONPATH=src uv run python -m crosschat.main --config config.metatest2.json
-PYTHONPATH=src uv run python -m crosschat.main --server-id metatest2 --host 10.0.0.1 -v
+uv run python main.py
+uv run python main.py --config config.metatest2.json
+uv run python main.py --server-id metatest2 --host 10.0.0.1 -v
 ```
 
 Connect to the aiomonitor REPL:
@@ -22,6 +24,35 @@ telnet localhost 20103
 ```
 
 Type `status` to see known servers and their online/users state.
+
+### Library
+
+```python
+import asyncio
+from crosschat import CrossChat
+
+async def main():
+    chat = CrossChat(config='config.json', verbose=True)
+    await chat.run()
+
+asyncio.run(main())
+```
+
+Create a `CrossChat` instance with a config dict directly:
+
+```python
+chat = CrossChat({
+    'server_id': 'myserver',
+    'mqtt': {'host': '10.0.0.1', 'port': 1883},
+})
+await chat.run()
+```
+
+Override any config value at construction time:
+
+```python
+chat = CrossChat(config='config.json', host='10.0.0.2', server_id='metatest2')
+```
 
 ## Configuration
 
@@ -125,15 +156,15 @@ Servers can exchange arbitrary out-of-band messages via OOC topics:
 |---|---|
 | `m/<from>/<to>/ooc/<type>` | `<any JSON value>` |
 
-OOC messages are delivered via `state.subscribe_ooc(type, callback)` and sent via
-`state.send_ooc(target_sid, type, payload)` or `server.send_ooc(type, payload)`.
+OOC messages are delivered via `chat.state.subscribe_ooc(type, callback)` and sent via
+`chat.state.send_ooc(target_sid, type, payload)` or `server.send_ooc(type, payload)`.
 
 The callback receives `(sender_server: CrossChatServer, payload, ooc_type)`.
 
 ```python
 # Log remote debug/warning/info messages locally
 for level in ('debug', 'warning', 'info'):
-    state.subscribe_ooc(level, lambda server, payload, name, _l=level:
+    chat.state.subscribe_ooc(level, lambda server, payload, name, _l=level:
         getattr(log, _l)('ooc_log', server_id=server.id, ooc_type=name, payload=payload))
 ```
 
@@ -148,30 +179,43 @@ Servers subscribe to the following topics:
 
 Unknown endpoints under `m/+/<own_server_id>/` are logged as warnings.
 
-## State API
+## CrossChat API
 
-The `CrossChatState` object provides helpers for dynamic state and OOC management:
+The `CrossChat` class wraps the full lifecycle and exposes `CrossChatState` as `chat.state`:
+
+| Method / Attribute | Description |
+|---|---|
+| `CrossChat(config, *, host, port, server_id, console_port, verbose)` | Create instance. `config` can be a dict, file path, or `None` for all-defaults. Keyword args override config values. |
+| `chat.state` | The underlying `CrossChatState` instance |
+| `await chat.run()` | Connect to MQTT, publish state, listen for messages, start aiomonitor console |
+| `await chat.listen_messages(client, tg)` | Subscribe to MQTT topics and process incoming messages in a task group |
+| `chat.load_config(path)` | Load JSON config from file |
+| `chat.setup_logging(verbose)` | Configure structlog (called automatically by `run()`) |
+
+### CrossChatState
+
+The `CrossChatState` object provides helpers for dynamic state and OOC management, accessible via `chat.state`:
 
 | Method | Description |
 |---|---|
-| `state.set_state(key, value)` | Set own state, publish retained `state/<sid>/<key>` to MQTT, and notify subscribers |
-| `state.subscribe(key, callback)` | Register `async def cb(server: CrossChatServer, key: str, value: str)` for state changes on any server |
-| `state.get_meta()` | Return own metadata dict |
-| `state.set_meta(meta)` | Set own metadata (called automatically from config on startup) |
-| `state.set_client(client, prefix)` | Wire up MQTT client; without this, `set_state` operates in-memory only |
-| `state.subscribe_ooc(type, callback)` | Register `async def cb(server: CrossChatServer, payload, type: str)` for OOC messages |
-| `state.send_ooc(target_sid, type, payload)` | Send an OOC message to another server |
+| `chat.state.set_state(key, value)` | Set own state, publish retained `state/<sid>/<key>` to MQTT, and notify subscribers |
+| `chat.state.subscribe(key, callback)` | Register `async def cb(server: CrossChatServer, key: str, value: str)` for state changes on any server |
+| `chat.state.get_meta()` | Return own metadata dict |
+| `chat.state.set_meta(meta)` | Set own metadata (called automatically from config on startup) |
+| `chat.state.set_client(client, prefix)` | Wire up MQTT client; without this, `set_state` operates in-memory only |
+| `chat.state.subscribe_ooc(type, callback)` | Register `async def cb(server: CrossChatServer, payload, type: str)` for OOC messages |
+| `chat.state.send_ooc(target_sid, type, payload)` | Send an OOC message to another server |
 | `server.send_ooc(type, payload)` | Convenience wrapper; sends to `server.id` via the owning state |
 
 ### Example
 
 ```python
-state.set_state("map", "gm_construct")
+chat.state.set_state('map', 'gm_construct')
 
 async def on_map_change(server, key, value):
-    print(f"{server.id} changed {key} to {value}")
+    print(f'{server.id} changed {key} to {value}')
 
-state.subscribe("map", on_map_change)
+chat.state.subscribe('map', on_map_change)
 ```
 
 All callbacks are dispatched as `asyncio.Task` and receive the originating `CrossChatServer` instance, the state key, and the new value.
