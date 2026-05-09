@@ -1,6 +1,16 @@
 local Tag = 'crosschat'
 module(Tag, package.seeall)
 
+
+local srvcol = Color(90, 90, 90, 255)
+local white = Color(255, 255, 255, 255)
+local red = Color(230, 100, 100, 255)
+local blue = Color(150, 200, 255, 255)
+local green = Color(100, 230, 100)
+local grey = Color(200, 200, 200, 255)
+local orange = Color(255, 180, 80, 255)
+local lightblue = Color(150, 200, 255, 255)
+
 _M._RAW = setmetatable({}, {
 	__index = function(self, key)
 		return rawget(_M, key)
@@ -42,8 +52,8 @@ end
 serverdata = _RAW.serverdata or {}
 local serverdata = serverdata
 
-concommand.Add('crosschat_status', function(args)
-	local full = type(args) == 'table' and args[1] == 'full'
+concommand.Add('crosschat_status', function(_,line)
+	local full = line and line:find"full"
 	MsgC(white, '[CrossChat] Known servers:\n')
 
 	for _, server in next, serverdata do
@@ -171,14 +181,6 @@ function GetPlayer(ServerID, UserID)
 	return ply
 end
 
-local srvcol = Color(90, 90, 90, 255)
-local white = Color(255, 255, 255, 255)
-local red = Color(230, 100, 100, 255)
-local blue = Color(150, 200, 255, 255)
-local green = Color(100, 230, 100)
-local grey = Color(200, 200, 200, 255)
-local orange = Color(255, 180, 80, 255)
-local lightblue = Color(150, 200, 255, 255)
 
 local servercolors = {
 	['0'] = Color(100, 255, 100, 255)
