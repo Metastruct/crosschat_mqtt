@@ -4,7 +4,11 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+import structlog
+
 from crosschat.models import CrossChatServer, CrossChatUser
+
+log = structlog.get_logger()
 
 
 class CrossChatState:
@@ -65,9 +69,9 @@ class CrossChatState:
 		if self._client is None:
 			return
 		topic = f'{self._prefix}state/{self._own_id}/{key}'
-		await self._client.publish(topic, payload=str(value), qos=1, retain=True)
+		await self._client.publish(topic, payload=str(value), qos=2, retain=True)
 
-	def get_or_create_user(self, server_id: str, user_id: str) -> CrossChatUser:
+	def get_or_create_user(self, server_id: str, user_id: int) -> CrossChatUser:
 		server = self._ensure_server(server_id)
 		if user_id in server.users:
 			return server.users[user_id]
@@ -79,7 +83,7 @@ class CrossChatState:
 		server.users[user_id] = user
 		return user
 
-	def add_user(self, user_id: str, name: str) -> CrossChatUser:
+	def add_user(self, user_id: int, name: str) -> CrossChatUser:
 		server = self._ensure_server(self._own_id)
 		user = CrossChatUser(
 			name=name,
@@ -91,7 +95,7 @@ class CrossChatState:
 		server.users[user_id] = user
 		return user
 
-	def remove_user(self, user_id: str) -> CrossChatUser | None:
+	def remove_user(self, user_id: int) -> CrossChatUser | None:
 		server = self._ensure_server(self._own_id)
 		return server.users.pop(user_id, None)
 

@@ -36,13 +36,13 @@ def do_add(ctx: click.Context, name: str) -> None:
 	if state is None or client is None:
 		print_fail('state or client not available')
 		return
-	user_id = str(state._next_seq)
+	user_id = state._next_seq
 	user = state.add_user(user_id, name)
-	payload = json.dumps({'id': user.id, 'name': user.name})
+	payload = json.dumps(user.serialize())
 	for sid, server in state.servers.items():
 		if sid != state._own_id and server.online:
 			asyncio.create_task(
-				client.publish(f'crosschat/m/{state._own_id}/{sid}/user/{user.id}', payload=payload, qos=1)
+				client.publish(f'crosschat/m/{state._own_id}/{sid}/user/{user.id}', payload=payload, qos=2)
 			)
 	click.echo(f'User {user_id} ({name}) added with seq {user.id}')
 
@@ -62,15 +62,15 @@ def do_del(ctx: click.Context, user_id: str) -> None:
 	if state is None or client is None:
 		print_fail('state or client not available')
 		return
-	user = state.remove_user(user_id)
+	user = state.remove_user(int(user_id))
 	if user is None:
 		click.echo(f'User {user_id} not found')
 		return
-	payload = json.dumps({'id': user.id})
+	payload = json.dumps({})
 	for sid, server in state.servers.items():
 		if sid != state._own_id and server.online:
 			asyncio.create_task(
-				client.publish(f'crosschat/m/{state._own_id}/{sid}/user/{user.id}/remove', payload=payload, qos=1)
+				client.publish(f'crosschat/m/{state._own_id}/{sid}/user/{user.id}/remove', payload=payload, qos=2)
 			)
 	click.echo(f'User {user_id} removed')
 
@@ -98,6 +98,6 @@ def do_msg(ctx: click.Context, user_id: str, message: tuple[str, ...]) -> None:
 		if sid != state._own_id and server.online:
 			targets += 1
 			asyncio.create_task(
-				client.publish(f'crosschat/m/{state._own_id}/{sid}/msg/{user_id}', payload=payload, qos=1)
+				client.publish(f'crosschat/m/{state._own_id}/{sid}/msg/{user_id}', payload=payload, qos=2)
 			)
 	click.echo(f'Message sent to {user_id} on {targets} online server(s)')

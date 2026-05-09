@@ -14,6 +14,16 @@ class CrossChatUser:
 	first_seen: datetime
 	server: CrossChatServer
 	id: int = 0
+	extra: dict = field(default_factory=dict)
+
+	def serialize(self):
+		result = {
+			'name': self.name,
+			'first_seen': self.first_seen.isoformat(),
+			'server': self.server.id,
+		}
+		result.update(self.extra)
+		return result
 
 	def __repr__(self):
 		return f"CrossChatUser({self.name!r}, server={self.server!r})"
@@ -29,6 +39,7 @@ class CrossChatServer:
 	users: dict[int, CrossChatUser] = field(default_factory=dict)
 	states: dict[str, str] = field(default_factory=dict)
 	meta: dict = field(default_factory=dict)
+	burst_in_progress: bool = False
 
 	def __repr__(self):
 		return f"CrossChatServer({self.id!r}, users={len(self.users)})"
