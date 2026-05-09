@@ -7,8 +7,10 @@ from datetime import datetime
 @dataclass
 class CrossChatUser:
 	id: str
+	name: str
 	first_seen: datetime
 	server: CrossChatServer
+	seq: int = 0
 
 
 @dataclass

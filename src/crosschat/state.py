@@ -9,6 +9,7 @@ class CrossChatState:
 	def __init__(self) -> None:
 		self.servers: dict[str, CrossChatServer] = {}
 		self._own_id: str = ''
+		self._next_seq: int = 1
 
 	def set_own_id(self, sid: str) -> None:
 		self._own_id = sid
@@ -29,11 +30,29 @@ class CrossChatState:
 			return server.users[user_id]
 		user = CrossChatUser(
 			id=user_id,
+			name='',
 			first_seen=datetime.now(timezone.utc),
 			server=server,
 		)
 		server.users[user_id] = user
 		return user
+
+	def add_user(self, user_id: str, name: str) -> CrossChatUser:
+		server = self._ensure_server(self._own_id)
+		user = CrossChatUser(
+			id=user_id,
+			name=name,
+			first_seen=datetime.now(timezone.utc),
+			server=server,
+			seq=self._next_seq,
+		)
+		self._next_seq += 1
+		server.users[user_id] = user
+		return user
+
+	def remove_user(self, user_id: str) -> CrossChatUser | None:
+		server = self._ensure_server(self._own_id)
+		return server.users.pop(user_id, None)
 
 	def format_status(self) -> str:
 		parts = [f'[Own ID: {self._own_id}]', '']
@@ -45,7 +64,7 @@ class CrossChatState:
 			for uid in sorted(server.users):
 				user = server.users[uid]
 				ts = user.first_seen.strftime('%Y-%m-%d %H:%M:%S UTC')
-				parts.append(f'    └ {uid}  (since {ts})')
+				parts.append(f'    └ {uid} ({user.name})  (since {ts})')
 		if not self.servers:
 			parts.append('  (no servers known)')
 		return '\n'.join(parts)

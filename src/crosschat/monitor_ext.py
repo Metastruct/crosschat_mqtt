@@ -1,3 +1,6 @@
+import asyncio
+import json
+
 import click
 
 from aiomonitor import monitor_cli
@@ -16,3 +19,84 @@ def do_status(ctx: click.Context) -> None:
 		print_fail('state not available')
 		return
 	click.echo(state.format_status())
+
+
+@monitor_cli.command(name='add')
+@click.argument('user_id')
+@click.argument('name')
+@auto_command_done
+def do_add(ctx: click.Context, user_id: str, name: str) -> None:
+	"""
+	Add a local user and network to other game servers.
+
+	Usage: add <id> <name>
+	"""
+	monitor = ctx.obj
+	state = monitor.console_locals.get('state')
+	client = monitor.console_locals.get('client')
+	if state is None or client is None:
+		print_fail('state or client not available')
+		return
+	user = state.add_user(user_id, name)
+	payload = json.dumps({'id': user.id, 'name': user.name, 'seq': user.seq, 'server_id': state._own_id})
+	asyncio.run_coroutine_threadsafe(
+		client.publish(f'crosschat/m/all/user/{user.seq}', payload=payload, qos=1),
+		monitor.loop,
+	)
+	click.echo(f'User {user_id} ({name}) added with seq {user.seq}')
+
+
+@monitor_cli.command(name='del')
+@click.argument('user_id')
+@auto_command_done
+def do_del(ctx: click.Context, user_id: str) -> None:
+	"""
+	Remove a local user and notify other game servers.
+
+	Usage: del <id>
+	"""
+	monitor = ctx.obj
+	state = monitor.console_locals.get('state')
+	client = monitor.console_locals.get('client')
+	if state is None or client is None:
+		print_fail('state or client not available')
+		return
+	user = state.remove_user(user_id)
+	if user is None:
+		click.echo(f'User {user_id} not found')
+		return
+	payload = json.dumps({'id': user.id, 'server_id': state._own_id})
+	asyncio.run_coroutine_threadsafe(
+		client.publish(f'crosschat/m/all/user/{user.seq}/remove', payload=payload, qos=1),
+		monitor.loop,
+	)
+	click.echo(f'User {user_id} removed')
+
+
+@monitor_cli.command(name='msg')
+@click.argument('user_id')
+@click.argument('message', nargs=-1, required=True)
+@auto_command_done
+def do_msg(ctx: click.Context, user_id: str, message: tuple[str, ...]) -> None:
+	"""
+	Send a message to a user on all online game servers.
+
+	Usage: msg <userid> <message>
+	"""
+	monitor = ctx.obj
+	state = monitor.console_locals.get('state')
+	client = monitor.console_locals.get('client')
+	if state is None or client is None:
+		print_fail('state or client not available')
+		return
+	msg_text = ' '.join(message)
+	payload = json.dumps({'msg': msg_text})
+	targets = 0
+	for sid, server in state.servers.items():
+		if sid != state._own_id and server.online:
+			targets += 1
+			asyncio.run_coroutine_threadsafe(
+				client.publish(f'crosschat/m/{sid}/msg/{user_id}', payload=payload, qos=1),
+				monitor.loop,
+			)
+	click.echo(f'Message sent to {user_id} on {targets} online server(s)')
