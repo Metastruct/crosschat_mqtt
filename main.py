@@ -109,6 +109,7 @@ async def main() -> None:
 							chat.state.publish(f'm/{chat.state._own_id}/{sid}/msg/{uid}', payload=payload)
 						)
 
+		webchat_app.state.crosschat = chat
 		webchat_config = uvicorn.Config(webchat_app, host=webchat_host, port=webchat_port, log_level='info')
 		webchat_server = uvicorn.Server(webchat_config)
 

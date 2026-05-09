@@ -10,6 +10,24 @@ app = FastAPI()
 @app.websocket('/ws')
 async def websocket_endpoint(ws: WebSocket) -> None:
 	await ws.accept()
+
+	state = ws.app.state.crosschat.state
+	servers = [
+		{
+			'id': sid,
+			'online': srv.online,
+			'started': srv.started,
+			'meta': srv.meta,
+			'states': srv.states,
+			'users': [
+				{'id': uid, **user.serialize()}
+				for uid, user in srv.users.items()
+			],
+		}
+		for sid, srv in state.servers.items()
+	]
+	await ws.send_text(json.dumps({'cmd': 'server_list', 'servers': servers}))
+
 	try:
 		while True:
 			raw = await ws.receive_text()
