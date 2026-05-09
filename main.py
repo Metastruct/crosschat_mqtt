@@ -65,7 +65,6 @@ async def main() -> int:
 
 				async def add_fake():
 					await asyncio.sleep(4)
-					asd()
 					print('adding late user')
 					uid = await add_and_broadcast(chat, 'LateUser1')
 					fake_user_ids.append(uid)
