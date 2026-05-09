@@ -22,7 +22,7 @@
             "name": "crosschat: server1",
             "type": "debugpy",
             "request": "launch",
-            "module": "crosschat.main",
+            "module": "main",
             "console": "integratedTerminal",
             "args": ["--config", "config.json"],
             "env": {
@@ -35,7 +35,7 @@
             "name": "crosschat: server2",
             "type": "debugpy",
             "request": "launch",
-            "module": "crosschat.main",
+            "module": "main",
             "console": "integratedTerminal",
             "args": ["--config", "config.metatest2.json"],
             "env": {
