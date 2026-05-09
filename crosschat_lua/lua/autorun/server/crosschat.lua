@@ -34,7 +34,7 @@ _M._RAW = setmetatable({}, {
 
 util.AddNetworkString(Tag)
 
-IN_DBG = _RAW.IN_DBG or false
+IN_DBG = _RAW.IN_DBG or true
 
 function dbg(...)
 	if IN_DBG then
@@ -598,14 +598,37 @@ hook.Add('ShutDown', Tag, function()
 	hook.Remove('ShutDown', Tag)
 end)
 
+local function publish_own_status()
+	if not mq.connected() then return end
+	local started = os.time()
+	publish('state/' .. SERVER_ID .. '/status', {started = started}, true)
+	publish('state/' .. SERVER_ID .. '/meta', META_CONFIG, true)
+	DBG('State published, server_id=' .. SERVER_ID .. ', started=' .. started)
+end
+
 local function init()
 	hook.Add('OnMQTT', Tag, on_mqtt)
+	hook.Add('OnMQTTConnected', Tag, function(ok)
+		if ok then
+			publish_own_status()
+		end
+	end)
 
 	mq.subscribe(TOPIC_PREFIX .. 'state/+/#')
 	mq.subscribe(TOPIC_PREFIX .. 'm/+/' .. SERVER_ID .. '/#')
 
+	if mq.connected() then
+		publish_own_status()
+	end
+
 	DBG('Initialized, server_id=' .. SERVER_ID)
 end
+
+timer.Simple(0, function()
+	if mq and mq.set_will then
+		mq.set_will(TOPIC_PREFIX .. 'state/' .. SERVER_ID .. '/status', '{"started":0}', 2, true)
+	end
+end)
 
 timer.Simple(1, function()
 	if not mq.connected() then
