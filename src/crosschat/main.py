@@ -117,7 +117,7 @@ async def run_local_console(monitor: aiomonitor.Monitor) -> None:
 		current_monitor.reset(cm_token)
 
 
-async def listen_messages(client: aiomqtt.Client, state: CrossChatState) -> None:
+async def listen_messages(client: aiomqtt.Client, state: CrossChatState, tg: asyncio.TaskGroup) -> None:
 	await client.subscribe('crosschat/state/+/#')
 	await client.subscribe(f'crosschat/m/+/{state._own_id}/#')
 	async for message in client.messages:
@@ -139,42 +139,29 @@ async def listen_messages(client: aiomqtt.Client, state: CrossChatState) -> None
 					if online and sid != state._own_id:
 						burst_topic = f'crosschat/m/{state._own_id}/{sid}/burst/start'
 						log.debug('send burst', serverid=sid)
-						tasks = [
-							asyncio.create_task(
-								client.publish(burst_topic, payload='{}', qos=2),
-							),
-						]
+						tg.create_task(
+							client.publish(burst_topic, payload='{}', qos=2),
+						)
 						own_server = state.servers.get(state._own_id)
 						if own_server:
 							for user in own_server.users.values():
 								user_payload = json.dumps(user.serialize())
 								user_topic = f'crosschat/m/{state._own_id}/{sid}/user/{user.id}'
 								log.debug('send add(in burst)', topic=user_topic, payload=user_payload)
-								tasks.append(
-									asyncio.create_task(
-										client.publish(
-											user_topic,
-											payload=user_payload,
-											qos=2,
-										),
+								tg.create_task(
+									client.publish(
+										user_topic,
+										payload=user_payload,
+										qos=2,
 									),
 								)
 						user_count = len(own_server.users) if own_server else 0
 						end_topic = f'crosschat/m/{state._own_id}/{sid}/burst/end'
 						log.debug('send burst end', serverid=sid)
-						tasks.append(
-							asyncio.create_task(
-								client.publish(end_topic, payload=json.dumps({'user_count': user_count}), qos=2),
-							),
+						tg.create_task(
+							client.publish(end_topic, payload=json.dumps({'user_count': user_count}), qos=2),
 						)
-						try:
-							await asyncio.gather(*tasks)
-						except Exception as e:
-							log.error('burst_failed', server_id=sid, error=str(e))
-							await state.send_ooc(sid, 'error', {'msg': f'burst failed: {e}'})
-							raise
-						else:
-							log.info('burst_sent', server_id=sid, user_count=user_count)
+						log.info('burst_sent', server_id=sid, user_count=user_count)
 			elif key == 'meta' and len(parts) == 4:
 				try:
 					meta_data = json.loads(payload)
@@ -253,6 +240,19 @@ async def listen_messages(client: aiomqtt.Client, state: CrossChatState) -> None
 				ooc_name = parts[5]
 				server = state._ensure_server(from_sid)
 				await state._notify_ooc(server, ooc_name, payload)
+			elif endpoint == 'pm' and len(parts) == 7:
+				from_user_id = int(parts[5])
+				to_user_id = int(parts[6])
+				data = json.loads(payload)
+				msg_text = data.get('msg', '')
+				sender_server = state.servers.get(from_sid)
+				sender_user = sender_server.users.get(from_user_id) if sender_server else None
+				receiver_server = state.servers.get(state._own_id)
+				receiver_user = receiver_server.users.get(to_user_id) if receiver_server else None
+				log.info('PM', from_server=from_sid, from_user=from_user_id,
+				         from_name=sender_user.name if sender_user else '?',
+				         to_user=to_user_id, to_name=receiver_user.name if receiver_user else '?',
+				         msg=msg_text)
 			else:
 				log.warning('unknown_message_endpoint', topic=topic, endpoint=endpoint)
 
@@ -275,6 +275,7 @@ async def main() -> None:
 	port = config['mqtt']['port']
 	console_host = config.get('console_host', '127.0.0.1')
 	console_port = config.get('console_port', 20103)
+	console_enabled = config.get('console_enabled', True)
 	if args.console_port is not None:
 		console_port = args.console_port
 
@@ -335,21 +336,29 @@ async def main() -> None:
 			'status': status,
 			'client': client,
 		}
-		monitor = aiomonitor.start_monitor(
-			loop=loop,
-			host=console_host,
-			port=0,
-			console_port=console_port,
-			webui_port=0,
-			locals=console_locals,
-		)
+		if console_enabled:
+			monitor = aiomonitor.start_monitor(
+				loop=loop,
+				host=console_host,
+				port=0,
+				console_port=console_port,
+				webui_port=0,
+				locals=console_locals,
+			)
+		else:
+			monitor = None
+
 		async with asyncio.TaskGroup() as tg:
-			tg.create_task(listen_messages(client, state), name='mqtt_listener')
+			tg.create_task(listen_messages(client, state, tg), name='mqtt_listener')
 
-			with monitor:
-				tg.create_task(run_local_console(monitor), name='local_console')
-
-				log.info('running', server_id=sid)
+			if monitor is not None:
+				with monitor:
+					await asyncio.sleep(5)
+					tg.create_task(run_local_console(monitor), name='local_console')
+					log.info('running', server_id=sid)
+			else:
+				log.info('running (no console)', server_id=sid)
+				await asyncio.Event().wait()
 
 	log.info('shutdown', server_id=sid)
 

@@ -108,6 +108,15 @@ The `user_count` in burst end lets the receiver verify all users were received; 
 
 Sent to each online server (excluding self). On receipt the recipient user is looked up in the local server's user list; if missing a warning is logged.
 
+### Private Messaging
+
+| Topic | Payload |
+|---|---|
+| `m/<from>/<to>/pm/<from_user_id>/<to_user_id>` | `{"msg": "..."}` |
+
+Sent from a specific user on one server to a specific user on another server.
+On receipt the sender and receiver user info is logged.
+
 ### Out-of-Character (OOC) Messaging
 
 Servers can exchange arbitrary out-of-band messages via OOC topics:
@@ -177,3 +186,4 @@ The `CrossChatUser` class provides a `serialize()` method that returns a JSON-se
 | `add <name>` | Add a local user (auto-generated id) and broadcast to all servers |
 | `del <id>` | Remove a local user and broadcast removal |
 | `msg <userid> <message>` | Send a message to a user on all online servers |
+| `pm <from_user_id> <target_server_id> <to_user_id> <message>` | Send a private message from a local user to a user on another server |

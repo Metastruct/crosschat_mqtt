@@ -101,3 +101,30 @@ def do_msg(ctx: click.Context, user_id: str, message: tuple[str, ...]) -> None:
 				client.publish(f'crosschat/m/{state._own_id}/{sid}/msg/{user_id}', payload=payload, qos=2)
 			)
 	click.echo(f'Message sent to {user_id} on {targets} online server(s)')
+
+
+@monitor_cli.command(name='pm')
+@click.argument('from_user_id')
+@click.argument('target_server_id')
+@click.argument('to_user_id')
+@click.argument('message', nargs=-1, required=True)
+@auto_command_done
+def do_pm(ctx: click.Context, from_user_id: str, target_server_id: str, to_user_id: str, message: tuple[str, ...]) -> None:
+	"""
+	Send a private message from a local user to a user on another server.
+
+	Usage: pm <from_user_id> <target_server_id> <to_user_id> <message>
+	"""
+	monitor = ctx.obj
+	state = monitor.console_locals.get('state')
+	client = monitor.console_locals.get('client')
+	if state is None or client is None:
+		print_fail('state or client not available')
+		return
+	msg_text = ' '.join(message)
+	payload = json.dumps({'msg': msg_text})
+	topic = f'crosschat/m/{state._own_id}/{target_server_id}/pm/{from_user_id}/{to_user_id}'
+	asyncio.create_task(
+		client.publish(topic, payload=payload, qos=2)
+	)
+	click.echo(f'PM sent from {from_user_id} to {target_server_id}/{to_user_id}')
