@@ -7,6 +7,9 @@ import sys
 from pathlib import Path
 
 import uvicorn
+import structlog
+
+log = structlog.get_logger()
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'src'))
 
@@ -90,7 +93,11 @@ async def main() -> int:
 				tg.create_task(send_messages(), name='send_fake_messages')
 				tg.create_task(chat.run(tg), name='crosschat')
 				tg.create_task(webchat_server.serve(), name='webchat')
-				await chat.shutdown.wait()
+				try:
+					await chat.shutdown.wait()
+				finally:
+					log.info('shutting down webserver...')
+					await webchat_server.shutdown()
 		except* (KeyboardInterrupt, SystemExit):
 			pass
 		except* asyncio.exceptions.CancelledError:
@@ -112,4 +119,4 @@ async def main() -> int:
 if __name__ == '__main__':
 	if sys.platform == 'win32':
 		asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-	sys.exit(asyncio.run(main()))
+	sys.exit(asyncio.run(main(), debug=True))

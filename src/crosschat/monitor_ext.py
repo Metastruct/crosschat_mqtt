@@ -163,8 +163,10 @@ def do_exit(ctx: click.Context) -> None:
 	"""
 	monitor = ctx.obj
 	shutdown: asyncio.Event | None = monitor.console_locals.get('shutdown')
+	print('Calling for shutdown...')
 	if shutdown is not None:
 		shutdown.set()
+	raise asyncio.CancelledError('exit by user')
 
 
 @monitor_cli.command(name='quit')
@@ -177,5 +179,7 @@ def do_quit(ctx: click.Context) -> None:
 	"""
 	monitor = ctx.obj
 	shutdown: asyncio.Event | None = monitor.console_locals.get('shutdown')
+	print('Calling for shutdown...')
 	if shutdown is not None:
 		shutdown.set()
+	raise asyncio.CancelledError('exit by user')

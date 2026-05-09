@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import aiomqtt
 import aiomonitor
+import types
 import structlog
 
 from crosschat.models import BurstFlag, CrossChatHandler, CrossChatUser
@@ -26,10 +27,12 @@ properties.SessionExpiryInterval = 9
 
 
 log = structlog.get_logger()
+DEBUG = True
 
 
 class CrossChat:
 	_init = False
+	started: int
 
 	def __init__(
 		self,
@@ -45,6 +48,7 @@ class CrossChat:
 		self.state = CrossChatState()
 		self._config: dict = {}
 		self._verbose = verbose
+		self.started = int(time.time())
 		self._handler = handler
 		self.shutdown = asyncio.Event()
 
@@ -154,15 +158,15 @@ class CrossChat:
 		if self._init:
 			return
 		self._init = True
-
+		log.debug('init', client)
 		state = self.state
-		started = self.started
+
 		sid = self.state._own_id
 		await client.subscribe('crosschat/state/+/#')
 		await client.subscribe(f'crosschat/m/+/{state._own_id}/#')
 
-		await self.state.publish(f'state/{sid}/status', payload={'started': started}, retain=True)
-		log.info('state_published', topic=f'state/{sid}/status', started=started)
+		await self.state.publish(f'state/{sid}/status', payload={'started': self.started}, retain=True)
+		log.info('state_published', topic=f'state/{sid}/status', started=self.started)
 
 		meta_payload = self._config.get('meta', {})
 		await self.state.publish(f'state/{sid}/meta', payload=meta_payload, retain=True)
@@ -170,19 +174,74 @@ class CrossChat:
 		self.state.set_meta(self._config.get('meta', {}))
 
 	async def listen_messages(self, client: aiomqtt.Client, tg: asyncio.TaskGroup) -> None:
-		await self.init(client)
 
-		state = self.state
-		async for message in client.messages:
-			topic = message.topic.value
-			payload = message.payload.decode()
-			parts = topic.split('/')
-			if parts[0] != 'crosschat':
-				continue
-			if parts[1] == 'state' and len(parts) >= 4:
-				await self._handle_state_message(client, tg, parts, payload)
-			elif parts[1] == 'm' and len(parts) >= 5 and parts[3] == state._own_id:
-				await self._handle_m_message(topic, parts, payload)
+		# Forcing last will
+		original_disconnect = client._client.disconnect
+
+		def patched_disconnect(self, reason_code=None, properties=None):
+			print('HACK: paho.mqtt.disconnect(patched)! reason_code is now ', reason_code or '<SEND WILL>')
+			if not reason_code:
+				from paho.mqtt.reasoncodes import ReasonCode
+				from paho.mqtt.packettypes import PacketTypes
+
+				reason_code = ReasonCode(PacketTypes.DISCONNECT, identifier=4)
+			return original_disconnect(reasoncode=reason_code, properties=properties)
+
+		client._client.disconnect = types.MethodType(patched_disconnect, client._client)  # pyright: ignore[reportAttributeAccessIssue]
+
+		try:
+			await self.init(client)
+
+			state = self.state
+			async for message in client.messages:
+				topic = message.topic.value
+				payload = message.payload.decode()
+				parts = topic.split('/')
+				if parts[0] != 'crosschat':
+					if DEBUG:
+						log.debug('unhandled', topic=topic, payload=payload)
+					continue
+				if parts[1] == 'state' and len(parts) >= 4:
+					await self._handle_state_message(client, tg, parts, payload)
+					continue
+				elif parts[1] == 'm' and len(parts) >= 5 and parts[3] == state._own_id:
+					await self._handle_m_message(topic, parts, payload)
+					continue
+				if DEBUG:
+					log.debug('unhandled', topic=topic, payload=payload)
+		except aiomqtt.exceptions.MqttError:
+			if not self.shutdown.is_set():
+				raise
+		finally:
+			sid = self.state._own_id
+			payload = {'started': self.started}
+			print('Forcing last will...')
+
+			try:
+				await self.state.publish(f'state/{sid}/status', payload=payload, retain=True)
+			except aiomqtt.exceptions.MqttCodeError as e:
+				print('will fail', e)
+				pass
+		log.info('finished messages loop...')
+		try:
+			await asyncio.sleep(0.5)
+		except asyncio.CancelledError:
+			print('IDK ANYMORE')
+
+		printed = [asyncio.current_task()]
+		for task in tg._tasks:
+			if task not in printed:
+				printed.append(task)
+				print(' - REMAINING SHUTDOWN TASKGROUP TASK: ', task.get_name(), task)
+
+		for task in asyncio.all_tasks():
+			if task not in printed:
+				printed.append(task)
+				print('attempting to cancel:', task.get_name(), task)
+				task.cancel()
+
+	# l = asyncio.get_running_loop()
+	# l.run_until_complete(self.state.publish(f'state/{sid}/status', payload=payload, retain=True))
 
 	async def _handle_state_message(
 		self, client: aiomqtt.Client, tg: asyncio.TaskGroup, parts: list[str], payload: str
@@ -279,7 +338,11 @@ class CrossChat:
 					log.info('user_removed', server_id=from_sid, user_id=user_id)
 			else:
 				first_seen_str = data.get('first_seen')
-				first_seen = datetime.fromtimestamp(int(first_seen_str), tz=timezone.utc) if first_seen_str else datetime.now(timezone.utc)
+				first_seen = (
+					datetime.fromtimestamp(int(first_seen_str), tz=timezone.utc)
+					if first_seen_str
+					else datetime.now(timezone.utc)
+				)
 				known = {'name', 'first_seen', 'server', 'burst', 'cmd', 'id'}
 				extra = {k: v for k, v in data.items() if k not in known}
 				user = CrossChatUser(
@@ -355,11 +418,10 @@ class CrossChat:
 		self.state.set_own_id(sid)
 		self.state.set_task_group(tg)
 
-		self.started = int(time.time())
 		will = aiomqtt.Will(
 			topic=f'{prefix}state/{sid}/status',
 			payload=json.dumps({'started': 0}),
-			qos=2,
+			qos=1,
 			retain=True,
 		)
 
@@ -425,8 +487,9 @@ class CrossChat:
 			if monitor is not None:
 				with monitor:
 					await asyncio.sleep(5)
-					tg.create_task(self.run_local_console(monitor), name='local_console')
+					await tg.create_task(self.run_local_console(monitor), name='local_console')
 					log.info('running', server_id=sid)
+			print('Shutdown (lost console)')
 			await self.shutdown.wait()
 
 		log.info('shutdown', server_id=sid)
