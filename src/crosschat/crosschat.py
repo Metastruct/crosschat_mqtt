@@ -143,145 +143,177 @@ class CrossChat:
 			if parts[0] != 'crosschat':
 				continue
 			if parts[1] == 'state' and len(parts) >= 4:
-				sid = parts[2]
-				key = parts[3]
-				if key == 'online':
-					online = payload == 'online'
-					prev = state.servers.get(sid)
-					prev_online = prev.online if prev else None
-					state.set_online(sid, online)
-					if prev_online != online:
-						log.info('server_state_changed', server_id=sid, online=online)
-						if online and sid != state._own_id:
-							burst_topic = f'crosschat/m/{state._own_id}/{sid}/burst/start'
-							log.debug('send burst', serverid=sid)
-							tg.create_task(
-								client.publish(burst_topic, payload='{}', qos=2),
-							)
-							own_server = state.servers.get(state._own_id)
-							if own_server:
-								for user in own_server.users.values():
-									user_payload = json.dumps(user.serialize())
-									user_topic = f'crosschat/m/{state._own_id}/{sid}/user/{user.id}'
-									log.debug('send add(in burst)', topic=user_topic, payload=user_payload)
-									tg.create_task(
-										client.publish(
-											user_topic,
-											payload=user_payload,
-											qos=2,
-										),
-									)
-							user_count = len(own_server.users) if own_server else 0
-							end_topic = f'crosschat/m/{state._own_id}/{sid}/burst/end'
-							log.debug('send burst end', serverid=sid)
-							tg.create_task(
-								client.publish(end_topic, payload=json.dumps({'user_count': user_count}), qos=2),
-							)
-							log.info('burst_sent', server_id=sid, user_count=user_count)
-				elif key == 'meta' and len(parts) == 4:
-					try:
-						meta_data = json.loads(payload)
-					except json.JSONDecodeError:
-						meta_data = {}
-					server = state._ensure_server(sid)
-					server.meta = meta_data
-					log.info('server_meta_updated', server_id=sid, meta=meta_data)
-				else:
-					server = state._ensure_server(sid)
-					server.states[key] = payload
-					state._notify(server, key, payload)
+				await self._handle_state_message(client, tg, parts, payload)
 			elif parts[1] == 'm' and len(parts) >= 5 and parts[3] == state._own_id:
-				from_sid = parts[2]
-				endpoint = parts[4]
-				if endpoint == 'burst' and len(parts) == 6:
-					if parts[5] == 'start':
-						log.debug('burst_recv', topic=topic, payload=payload)
-						server = state._ensure_server(from_sid)
-						server.burst_in_progress = True
-						log.info('BURST', server_id=from_sid)
-					elif parts[5] == 'end':
-						log.debug('burst_recv', topic=topic, payload=payload)
-						server = state._ensure_server(from_sid)
-						server.burst_in_progress = False
-						server.burst_completed = True
-						data = json.loads(payload)
-						expected = data.get('user_count')
-						if expected is not None and len(server.users) != expected:
-							log.warning(
-								'burst_user_count_mismatch',
-								server_id=from_sid,
-								expected=expected,
-								actual=len(server.users),
-							)
-						log.info('BURST_END', server_id=from_sid, user_count=len(server.users))
-					else:
-						log.warning('unknown burst message')
-				elif endpoint == 'user' and len(parts) == 6:
-					user_id = int(parts[5])
-					data = json.loads(payload)
-					log.debug('burst_recv', topic=topic, payload=payload)
-					if from_sid and from_sid != state._own_id:
-						server = state._ensure_server(from_sid)
-						if not server.burst_in_progress and not server.burst_completed:
-							log.error('user_added_before_burst', server_id=from_sid, user_id=user_id)
-						first_seen_str = data.get('first_seen')
-						first_seen = (
-							datetime.fromisoformat(first_seen_str) if first_seen_str else datetime.now(timezone.utc)
-						)
-						known = {'name', 'first_seen', 'server'}
-						extra = {k: v for k, v in data.items() if k not in known}
-						user = CrossChatUser(
-							name=data.get('name', ''),
-							id=user_id,
-							first_seen=first_seen,
-							server=server,
-							extra=extra,
-						)
-						server.users[user_id] = user
-						log.info('user_added', server_id=from_sid, user_id=user_id, name=user.name)
-				elif endpoint == 'user' and len(parts) == 7 and parts[6] == 'remove':
-					user_id = int(parts[5])
-					data = json.loads(payload)
-					server = state.servers.get(from_sid)
-					if server:
-						if not server.burst_in_progress and not server.burst_completed:
-							log.error('user_removed_before_burst', server_id=from_sid, user_id=user_id)
-						if user_id in server.users:
-							del server.users[user_id]
-							log.info('user_removed', server_id=from_sid, user_id=user_id)
-				elif endpoint == 'msg' and len(parts) == 6:
-					sender_id = int(parts[5])
-					data = json.loads(payload)
-					msg_text = data.get('msg', '')
-					server = state._ensure_server(from_sid, ensure=True)
-					if not server.burst_in_progress and not server.burst_completed:
-						log.error('message_received_before_burst', server_id=from_sid, sender_id=sender_id)
-					user = server.get_user(sender_id, ensure=True)
-					log.debug('MESSAGE', sender=user, msg=msg_text)
-				elif endpoint == 'ooc' and len(parts) == 6:
-					ooc_name = parts[5]
-					server = state._ensure_server(from_sid)
-					await state._notify_ooc(server, ooc_name, payload)
-				elif endpoint == 'pm' and len(parts) == 7:
-					from_user_id = int(parts[5])
-					to_user_id = int(parts[6])
-					data = json.loads(payload)
-					msg_text = data.get('msg', '')
-					sender_server = state.servers.get(from_sid)
-					sender_user = sender_server.users.get(from_user_id) if sender_server else None
-					receiver_server = state.servers.get(state._own_id)
-					receiver_user = receiver_server.users.get(to_user_id) if receiver_server else None
-					log.info(
-						'PM',
-						from_server=from_sid,
-						from_user=from_user_id,
-						from_name=sender_user.name if sender_user else '?',
-						to_user=to_user_id,
-						to_name=receiver_user.name if receiver_user else '?',
-						msg=msg_text,
+				await self._handle_m_message(topic, parts, payload)
+
+	async def _handle_state_message(self, client: aiomqtt.Client, tg: asyncio.TaskGroup, parts: list[str], payload: str) -> None:
+		state = self.state
+		sid = parts[2]
+		key = parts[3]
+		if key == 'online':
+			online = payload == 'online'
+			prev = state.servers.get(sid)
+			prev_online = prev.online if prev else None
+			state.set_online(sid, online)
+			if prev_online != online:
+				log.info('server_state_changed', server_id=sid, online=online)
+				if online and sid != state._own_id:
+					burst_topic = f'crosschat/m/{state._own_id}/{sid}/burst/start'
+					log.debug('send burst', serverid=sid)
+					tg.create_task(
+						client.publish(burst_topic, payload='{}', qos=2),
 					)
-				else:
-					log.warning('unknown_message_endpoint', topic=topic, endpoint=endpoint)
+					own_server = state.servers.get(state._own_id)
+					if own_server:
+						for user in own_server.users.values():
+							user_payload = json.dumps(user.serialize())
+							user_topic = f'crosschat/m/{state._own_id}/{sid}/user/{user.id}'
+							log.debug('send add(in burst)', topic=user_topic, payload=user_payload)
+							tg.create_task(
+								client.publish(
+									user_topic,
+									payload=user_payload,
+									qos=2,
+								),
+							)
+					user_count = len(own_server.users) if own_server else 0
+					end_topic = f'crosschat/m/{state._own_id}/{sid}/burst/end'
+					log.debug('send burst end', serverid=sid)
+					tg.create_task(
+						client.publish(end_topic, payload=json.dumps({'user_count': user_count}), qos=2),
+					)
+					log.info('burst_sent', server_id=sid, user_count=user_count)
+		elif key == 'meta' and len(parts) == 4:
+			try:
+				meta_data = json.loads(payload)
+			except json.JSONDecodeError:
+				meta_data = {}
+			server = state._ensure_server(sid)
+			server.meta = meta_data
+			log.info('server_meta_updated', server_id=sid, meta=meta_data)
+		else:
+			server = state._ensure_server(sid)
+			server.states[key] = payload
+			state._notify(server, key, payload)
+
+	async def _handle_m_message(self, topic: str, parts: list[str], payload: str) -> None:
+		state = self.state
+		from_sid = parts[2]
+		endpoint = parts[4]
+		if endpoint == 'burst' and len(parts) == 6:
+			await self._handle_burst_message(from_sid, topic, parts, payload)
+		elif endpoint == 'user' and len(parts) == 6:
+			await self._handle_user_add_message(from_sid, topic, parts, payload)
+		elif endpoint == 'user' and len(parts) == 7 and parts[6] == 'remove':
+			await self._handle_user_remove_message(from_sid, topic, parts, payload)
+		elif endpoint == 'msg' and len(parts) == 6:
+			await self._handle_msg_message(from_sid, topic, parts, payload)
+		elif endpoint == 'ooc' and len(parts) == 6:
+			await self._handle_ooc_message(from_sid, topic, parts, payload)
+		elif endpoint == 'pm' and len(parts) == 7:
+			await self._handle_pm_message(from_sid, topic, parts, payload)
+		else:
+			log.warning('unknown_message_endpoint', topic=topic, endpoint=endpoint)
+
+	async def _handle_burst_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
+		state = self.state
+		if parts[5] == 'start':
+			log.debug('burst_recv', topic=topic, payload=payload)
+			server = state._ensure_server(from_sid)
+			server.burst_in_progress = True
+			log.info('BURST', server_id=from_sid)
+		elif parts[5] == 'end':
+			log.debug('burst_recv', topic=topic, payload=payload)
+			server = state._ensure_server(from_sid)
+			server.burst_in_progress = False
+			server.burst_completed = True
+			data = json.loads(payload)
+			expected = data.get('user_count')
+			if expected is not None and len(server.users) != expected:
+				log.warning(
+					'burst_user_count_mismatch',
+					server_id=from_sid,
+					expected=expected,
+					actual=len(server.users),
+				)
+			log.info('BURST_END', server_id=from_sid, user_count=len(server.users))
+		else:
+			log.warning('unknown burst message')
+
+	async def _handle_user_add_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
+		state = self.state
+		user_id = int(parts[5])
+		data = json.loads(payload)
+		log.debug('burst_recv', topic=topic, payload=payload)
+		if from_sid and from_sid != state._own_id:
+			server = state._ensure_server(from_sid)
+			if not server.burst_in_progress and not server.burst_completed:
+				log.error('user_added_before_burst', server_id=from_sid, user_id=user_id)
+			first_seen_str = data.get('first_seen')
+			first_seen = (
+				datetime.fromisoformat(first_seen_str) if first_seen_str else datetime.now(timezone.utc)
+			)
+			known = {'name', 'first_seen', 'server'}
+			extra = {k: v for k, v in data.items() if k not in known}
+			user = CrossChatUser(
+				name=data.get('name', ''),
+				id=user_id,
+				first_seen=first_seen,
+				server=server,
+				extra=extra,
+			)
+			server.users[user_id] = user
+			log.info('user_added', server_id=from_sid, user_id=user_id, name=user.name)
+
+	async def _handle_user_remove_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
+		state = self.state
+		user_id = int(parts[5])
+		data = json.loads(payload)
+		server = state.servers.get(from_sid)
+		if server:
+			if not server.burst_in_progress and not server.burst_completed:
+				log.error('user_removed_before_burst', server_id=from_sid, user_id=user_id)
+			if user_id in server.users:
+				del server.users[user_id]
+				log.info('user_removed', server_id=from_sid, user_id=user_id)
+
+	async def _handle_msg_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
+		state = self.state
+		sender_id = int(parts[5])
+		data = json.loads(payload)
+		msg_text = data.get('msg', '')
+		server = state._ensure_server(from_sid, ensure=True)
+		if not server.burst_in_progress and not server.burst_completed:
+			log.error('message_received_before_burst', server_id=from_sid, sender_id=sender_id)
+		user = server.get_user(sender_id, ensure=True)
+		log.debug('MESSAGE', sender=user, msg=msg_text)
+
+	async def _handle_ooc_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
+		state = self.state
+		ooc_name = parts[5]
+		server = state._ensure_server(from_sid)
+		await state._notify_ooc(server, ooc_name, payload)
+
+	async def _handle_pm_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
+		state = self.state
+		from_user_id = int(parts[5])
+		to_user_id = int(parts[6])
+		data = json.loads(payload)
+		msg_text = data.get('msg', '')
+		sender_server = state.servers.get(from_sid)
+		sender_user = sender_server.users.get(from_user_id) if sender_server else None
+		receiver_server = state.servers.get(state._own_id)
+		receiver_user = receiver_server.users.get(to_user_id) if receiver_server else None
+		log.info(
+			'PM',
+			from_server=from_sid,
+			from_user=from_user_id,
+			from_name=sender_user.name if sender_user else '?',
+			to_user=to_user_id,
+			to_name=receiver_user.name if receiver_user else '?',
+			msg=msg_text,
+		)
 
 	async def run(self, tg: asyncio.TaskGroup) -> None:
 		self.setup_logging(self._verbose)
