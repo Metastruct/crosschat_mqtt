@@ -39,10 +39,10 @@ Published on connect; broker auto-publishes `"offline"` via Last Will on disconn
 
 | Topic | Payload |
 |---|---|
-| `m/all/user/<seq>` | `{"id": "...", "name": "...", "seq": <int>, "server_id": "..."}` |
-| `m/all/user/<seq>/remove` | `{"id": "...", "server_id": "..."}` |
+| `m/<target_server_id>/user/<seq>` | `{"id": "...", "name": "...", "seq": <int>, "server_id": "..."}` |
+| `m/<target_server_id>/user/<seq>/remove` | `{"id": "...", "server_id": "..."}` |
 
-`seq` is a per-server auto-incrementing integer starting at 1. The `server_id` field identifies the origin server. Messages from self are ignored on receipt.
+`seq` is a per-server auto-incrementing integer starting at 1. The `server_id` field identifies the origin server. Messages from self are ignored on receipt. User add/remove are published to each online server individually.
 
 ### Messaging
 
@@ -50,7 +50,18 @@ Published on connect; broker auto-publishes `"offline"` via Last Will on disconn
 |---|---|
 | `m/<target_server_id>/msg/<user_id>` | `{"msg": "..."}` |
 
-Sent to all online servers (excluding self). On receipt the recipient user is looked up in the local server's user list; if missing a warning is logged.
+Sent to each online server (excluding self). On receipt the recipient user is looked up in the local server's user list; if missing a warning is logged.
+
+### Subscription
+
+Servers subscribe to the following topics:
+
+| Subscription | Purpose |
+|---|---|
+| `state/+/online` | Detect server presence changes |
+| `m/<own_server_id>/#` | Receive all messages, user sync, etc. destined for this server |
+
+Unknown endpoints under `m/<own_server_id>/` are logged as warnings.
 
 ## Commands (aiomonitor REPL)
 

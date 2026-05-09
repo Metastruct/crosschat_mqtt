@@ -119,59 +119,58 @@ async def run_local_console(monitor: aiomonitor.Monitor) -> None:
 
 async def listen_messages(client: aiomqtt.Client, state: CrossChatState) -> None:
 	await client.subscribe('crosschat/state/+/online')
-	await client.subscribe('crosschat/m/+/user/+')
-	await client.subscribe('crosschat/m/+/user/+/remove')
-	await client.subscribe(f'crosschat/m/{state._own_id}/msg/+')
+	await client.subscribe(f'crosschat/m/{state._own_id}/#')
 	async for message in client.messages:
 		topic = message.topic.value
 		payload = message.payload.decode()
 		parts = topic.split('/')
-		if len(parts) >= 4 and parts[0] == 'crosschat' and parts[1] == 'state' and parts[3] == 'online':
-			sid = parts[2]
-			online = payload == 'online'
-			prev = state.servers.get(sid)
-			prev_online = prev.online if prev else None
-			state.set_online(sid, online)
-			if prev_online != online:
-				log.info('server_state_changed', server_id=sid, online=online)
-		elif len(parts) == 5 and parts[0] == 'crosschat' and parts[1] == 'm' and parts[3] == 'user':
-			data = json.loads(payload)
-			sid = data.get('server_id', '')
-			if sid and sid != state._own_id:
-				server = state._ensure_server(sid)
+		if parts[0] != 'crosschat':
+			continue
+		if parts[1] == 'state':
+			if len(parts) >= 4 and parts[3] == 'online':
+				sid = parts[2]
+				online = payload == 'online'
+				prev = state.servers.get(sid)
+				prev_online = prev.online if prev else None
+				state.set_online(sid, online)
+				if prev_online != online:
+					log.info('server_state_changed', server_id=sid, online=online)
+		elif parts[1] == 'm' and len(parts) >= 5 and parts[2] == state._own_id:
+			endpoint = parts[3]
+			if endpoint == 'user' and len(parts) == 5:
+				data = json.loads(payload)
+				sid = data.get('server_id', '')
+				if sid and sid != state._own_id:
+					server = state._ensure_server(sid)
+					user_id = data['id']
+					user = CrossChatUser(
+						id=user_id,
+						name=data.get('name', ''),
+						seq=data.get('seq', 0),
+						first_seen=datetime.now(timezone.utc),
+						server=server,
+					)
+					server.users[user_id] = user
+					log.info('user_added', server_id=sid, user_id=user_id, name=user.name)
+			elif endpoint == 'user' and len(parts) == 6 and parts[5] == 'remove':
+				data = json.loads(payload)
+				sid = data.get('server_id', '')
 				user_id = data['id']
-				user = CrossChatUser(
-					id=user_id,
-					name=data.get('name', ''),
-					seq=data.get('seq', 0),
-					first_seen=datetime.now(timezone.utc),
-					server=server,
-				)
-				server.users[user_id] = user
-				log.info('user_added', server_id=sid, user_id=user_id, name=user.name)
-		elif (
-			len(parts) == 6
-			and parts[0] == 'crosschat'
-			and parts[1] == 'm'
-			and parts[3] == 'user'
-			and parts[5] == 'remove'
-		):
-			data = json.loads(payload)
-			sid = data.get('server_id', '')
-			user_id = data['id']
-			server = state.servers.get(sid)
-			if server and user_id in server.users:
-				del server.users[user_id]
-				log.info('user_removed', server_id=sid, user_id=user_id)
-		elif len(parts) == 5 and parts[0] == 'crosschat' and parts[1] == 'm' and parts[3] == 'msg':
-			recipient_id = parts[4]
-			data = json.loads(payload)
-			msg_text = data.get('msg', '')
-			own = state.servers.get(state._own_id)
-			if own and recipient_id in own.users:
-				log.info('msg_received', to_user=recipient_id, msg=msg_text)
+				server = state.servers.get(sid)
+				if server and user_id in server.users:
+					del server.users[user_id]
+					log.info('user_removed', server_id=sid, user_id=user_id)
+			elif endpoint == 'msg' and len(parts) == 5:
+				recipient_id = parts[4]
+				data = json.loads(payload)
+				msg_text = data.get('msg', '')
+				own = state.servers.get(state._own_id)
+				if own and recipient_id in own.users:
+					log.info('msg_received', to_user=recipient_id, msg=msg_text)
+				else:
+					log.warning('msg_user_missing', user_id=recipient_id)
 			else:
-				log.warning('msg_user_missing', user_id=recipient_id)
+				log.warning('unknown_message_endpoint', topic=topic, endpoint=endpoint)
 
 
 async def main() -> None:

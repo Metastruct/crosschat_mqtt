@@ -39,7 +39,9 @@ def do_add(ctx: click.Context, user_id: str, name: str) -> None:
 		return
 	user = state.add_user(user_id, name)
 	payload = json.dumps({'id': user.id, 'name': user.name, 'seq': user.seq, 'server_id': state._own_id})
-	asyncio.create_task(client.publish(f'crosschat/m/all/user/{user.seq}', payload=payload, qos=1))
+	for sid, server in state.servers.items():
+		if sid != state._own_id and server.online:
+			asyncio.create_task(client.publish(f'crosschat/m/{sid}/user/{user.seq}', payload=payload, qos=1))
 	click.echo(f'User {user_id} ({name}) added with seq {user.seq}')
 
 
@@ -63,7 +65,9 @@ def do_del(ctx: click.Context, user_id: str) -> None:
 		click.echo(f'User {user_id} not found')
 		return
 	payload = json.dumps({'id': user.id, 'server_id': state._own_id})
-	asyncio.create_task(client.publish(f'crosschat/m/all/user/{user.seq}/remove', payload=payload, qos=1))
+	for sid, server in state.servers.items():
+		if sid != state._own_id and server.online:
+			asyncio.create_task(client.publish(f'crosschat/m/{sid}/user/{user.seq}/remove', payload=payload, qos=1))
 	click.echo(f'User {user_id} removed')
 
 
