@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import asyncio
 import json
 
 import click
@@ -134,3 +137,18 @@ def do_pm(ctx: click.Context, from_user_id: str, target_server_id: str, to_user_
 		state.publish(f'm/{state._own_id}/{target_server_id}/pm/{from_user_id}/{to_user_id}', payload=payload)
 	)
 	click.echo(f'PM sent from {from_user_id} to {target_server_id}/{to_user_id}')
+
+
+@monitor_cli.command(name='exit')
+@monitor_cli.command(name='quit')
+@auto_command_done
+def do_exit(ctx: click.Context) -> None:
+	"""
+	Exit the application.
+
+	Usage: exit
+	"""
+	monitor = ctx.obj
+	shutdown: asyncio.Event | None = monitor.console_locals.get('shutdown')
+	if shutdown is not None:
+		shutdown.set()

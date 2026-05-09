@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import random
+import signal
 import sys
 from pathlib import Path
 
@@ -62,7 +63,9 @@ async def main() -> None:
 		verbose=args.verbose,
 		handler=handler,
 	)
-	_infinite = asyncio.Event()
+
+	loop = asyncio.get_running_loop()
+	loop.add_signal_handler(signal.SIGINT, chat.shutdown.set)
 
 	async with asyncio.TaskGroup() as tg:
 		fake_user_ids: list[int] = []
@@ -95,7 +98,7 @@ async def main() -> None:
 		tg.create_task(add_fake(), name='add_fake_user')
 		tg.create_task(send_messages(), name='send_fake_messages')
 		tg.create_task(chat.run(tg), name='crosschat')
-		await _infinite.wait()
+		await chat.shutdown.wait()
 
 
 if __name__ == '__main__':
