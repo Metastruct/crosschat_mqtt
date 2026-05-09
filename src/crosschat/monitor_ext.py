@@ -22,14 +22,13 @@ def do_status(ctx: click.Context) -> None:
 
 
 @monitor_cli.command(name='add')
-@click.argument('user_id')
 @click.argument('name')
 @auto_command_done
-def do_add(ctx: click.Context, user_id: str, name: str) -> None:
+def do_add(ctx: click.Context, name: str) -> None:
 	"""
-	Add a local user and network to other game servers.
+	Add a local user and broadcast to other game servers.
 
-	Usage: add <id> <name>
+	Usage: add <name>
 	"""
 	monitor = ctx.obj
 	state = monitor.console_locals.get('state')
@@ -37,12 +36,15 @@ def do_add(ctx: click.Context, user_id: str, name: str) -> None:
 	if state is None or client is None:
 		print_fail('state or client not available')
 		return
+	user_id = str(state._next_seq)
 	user = state.add_user(user_id, name)
-	payload = json.dumps({'id': user.id, 'name': user.name, 'seq': user.seq, 'server_id': state._own_id})
+	payload = json.dumps({'id': user.id, 'name': user.name})
 	for sid, server in state.servers.items():
 		if sid != state._own_id and server.online:
-			asyncio.create_task(client.publish(f'crosschat/m/{sid}/user/{user.seq}', payload=payload, qos=1))
-	click.echo(f'User {user_id} ({name}) added with seq {user.seq}')
+			asyncio.create_task(
+				client.publish(f'crosschat/m/{state._own_id}/{sid}/user/{user.id}', payload=payload, qos=1)
+			)
+	click.echo(f'User {user_id} ({name}) added with seq {user.id}')
 
 
 @monitor_cli.command(name='del')
@@ -64,10 +66,12 @@ def do_del(ctx: click.Context, user_id: str) -> None:
 	if user is None:
 		click.echo(f'User {user_id} not found')
 		return
-	payload = json.dumps({'id': user.id, 'server_id': state._own_id})
+	payload = json.dumps({'id': user.id})
 	for sid, server in state.servers.items():
 		if sid != state._own_id and server.online:
-			asyncio.create_task(client.publish(f'crosschat/m/{sid}/user/{user.seq}/remove', payload=payload, qos=1))
+			asyncio.create_task(
+				client.publish(f'crosschat/m/{state._own_id}/{sid}/user/{user.id}/remove', payload=payload, qos=1)
+			)
 	click.echo(f'User {user_id} removed')
 
 
@@ -93,5 +97,7 @@ def do_msg(ctx: click.Context, user_id: str, message: tuple[str, ...]) -> None:
 	for sid, server in state.servers.items():
 		if sid != state._own_id and server.online:
 			targets += 1
-			asyncio.create_task(client.publish(f'crosschat/m/{sid}/msg/{user_id}', payload=payload, qos=1))
+			asyncio.create_task(
+				client.publish(f'crosschat/m/{state._own_id}/{sid}/msg/{user_id}', payload=payload, qos=1)
+			)
 	click.echo(f'Message sent to {user_id} on {targets} online server(s)')

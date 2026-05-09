@@ -29,7 +29,6 @@ class CrossChatState:
 		if user_id in server.users:
 			return server.users[user_id]
 		user = CrossChatUser(
-			id=user_id,
 			name='',
 			first_seen=datetime.now(timezone.utc),
 			server=server,
@@ -40,11 +39,10 @@ class CrossChatState:
 	def add_user(self, user_id: str, name: str) -> CrossChatUser:
 		server = self._ensure_server(self._own_id)
 		user = CrossChatUser(
-			id=user_id,
 			name=name,
 			first_seen=datetime.now(timezone.utc),
 			server=server,
-			seq=self._next_seq,
+			id=self._next_seq,
 		)
 		self._next_seq += 1
 		server.users[user_id] = user

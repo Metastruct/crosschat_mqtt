@@ -119,7 +119,7 @@ async def run_local_console(monitor: aiomonitor.Monitor) -> None:
 
 async def listen_messages(client: aiomqtt.Client, state: CrossChatState) -> None:
 	await client.subscribe('crosschat/state/+/online')
-	await client.subscribe(f'crosschat/m/{state._own_id}/#')
+	await client.subscribe(f'crosschat/m/+/{state._own_id}/#')
 	async for message in client.messages:
 		topic = message.topic.value
 		payload = message.payload.decode()
@@ -135,33 +135,62 @@ async def listen_messages(client: aiomqtt.Client, state: CrossChatState) -> None
 				state.set_online(sid, online)
 				if prev_online != online:
 					log.info('server_state_changed', server_id=sid, online=online)
-		elif parts[1] == 'm' and len(parts) >= 5 and parts[2] == state._own_id:
-			endpoint = parts[3]
-			if endpoint == 'user' and len(parts) == 5:
+					if online and sid != state._own_id:
+						tasks = [
+							asyncio.create_task(
+								client.publish(f'crosschat/m/{state._own_id}/{sid}/burst/start', payload='{}', qos=1),
+							),
+						]
+						own_server = state.servers.get(state._own_id)
+						if own_server:
+							for user in own_server.users.values():
+								user_payload = json.dumps({'id': user.id, 'name': user.name})
+								tasks.append(
+									asyncio.create_task(
+										client.publish(
+											f'crosschat/m/{state._own_id}/{sid}/user/{user.id}',
+											payload=user_payload,
+											qos=1,
+										),
+									),
+								)
+						tasks.append(
+							asyncio.create_task(
+								client.publish(f'crosschat/m/{state._own_id}/{sid}/burst/end', payload='{}', qos=1),
+							),
+						)
+						await asyncio.gather(*tasks)
+						log.info('burst_sent', server_id=sid, user_count=len(own_server.users) if own_server else 0)
+		elif parts[1] == 'm' and len(parts) >= 5 and parts[3] == state._own_id:
+			from_sid = parts[2]
+			endpoint = parts[4]
+			if endpoint == 'burst' and len(parts) == 6:
+				if parts[5] == 'start':
+					log.info('burst_start', server_id=from_sid)
+				elif parts[5] == 'end':
+					log.info('burst_end', server_id=from_sid)
+			elif endpoint == 'user' and len(parts) == 6:
 				data = json.loads(payload)
-				sid = data.get('server_id', '')
-				if sid and sid != state._own_id:
-					server = state._ensure_server(sid)
-					user_id = data['id']
+				user_id = data['id']
+				if from_sid and from_sid != state._own_id:
+					server = state._ensure_server(from_sid)
 					user = CrossChatUser(
-						id=user_id,
 						name=data.get('name', ''),
-						seq=data.get('seq', 0),
+						id=data.get('seq', 0),
 						first_seen=datetime.now(timezone.utc),
 						server=server,
 					)
 					server.users[user_id] = user
-					log.info('user_added', server_id=sid, user_id=user_id, name=user.name)
-			elif endpoint == 'user' and len(parts) == 6 and parts[5] == 'remove':
+					log.info('user_added', server_id=from_sid, user_id=user_id, name=user.name)
+			elif endpoint == 'user' and len(parts) == 7 and parts[6] == 'remove':
 				data = json.loads(payload)
-				sid = data.get('server_id', '')
 				user_id = data['id']
-				server = state.servers.get(sid)
+				server = state.servers.get(from_sid)
 				if server and user_id in server.users:
 					del server.users[user_id]
-					log.info('user_removed', server_id=sid, user_id=user_id)
-			elif endpoint == 'msg' and len(parts) == 5:
-				recipient_id = parts[4]
+					log.info('user_removed', server_id=from_sid, user_id=user_id)
+			elif endpoint == 'msg' and len(parts) == 6:
+				recipient_id = parts[5]
 				data = json.loads(payload)
 				msg_text = data.get('msg', '')
 				own = state.servers.get(state._own_id)

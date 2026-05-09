@@ -27,6 +27,11 @@ Type `status` to see known servers and their online/users state.
 
 All topics use the `crosschat/` prefix.
 
+### Topic Structure
+
+All server-to-server messages use the format `m/<from_server>/<to_server>/<type>/<details>`.
+The `from_server` is identified by the topic rather than the payload.
+
 ### Server Presence
 
 | Topic | Payload | Retained |
@@ -35,20 +40,30 @@ All topics use the `crosschat/` prefix.
 
 Published on connect; broker auto-publishes `"offline"` via Last Will on disconnect.
 
-### User Synchronisation
+### User Burst (on server online)
+
+When a server comes online, each already-online server sends all its local users in a burst:
 
 | Topic | Payload |
 |---|---|
-| `m/<target_server_id>/user/<seq>` | `{"id": "...", "name": "...", "seq": <int>, "server_id": "..."}` |
-| `m/<target_server_id>/user/<seq>/remove` | `{"id": "...", "server_id": "..."}` |
+| `m/<from>/<to>/burst/start` | `{}` |
+| `m/<from>/<to>/user/<seq>` | `{"id": <seq>, "name": "..."}` |
+| `m/<from>/<to>/burst/end` | `{}` |
 
-`seq` is a per-server auto-incrementing integer starting at 1. The `server_id` field identifies the origin server. Messages from self are ignored on receipt. User add/remove are published to each online server individually.
+### User Synchronisation (incremental)
+
+| Topic | Payload |
+|---|---|
+| `m/<from>/<to>/user/<seq>` | `{"id": <seq>, "name": "..."}` |
+| `m/<from>/<to>/user/<seq>/remove` | `{"id": <seq>}` |
+
+`seq` is a per-server auto-incrementing integer starting at 1. Messages from self are ignored on receipt (matched by `from_server` in topic). User add/remove are published to each online server individually.
 
 ### Messaging
 
 | Topic | Payload |
 |---|---|
-| `m/<target_server_id>/msg/<user_id>` | `{"msg": "..."}` |
+| `m/<from>/<to>/msg/<user_id>` | `{"msg": "..."}` |
 
 Sent to each online server (excluding self). On receipt the recipient user is looked up in the local server's user list; if missing a warning is logged.
 
@@ -59,15 +74,15 @@ Servers subscribe to the following topics:
 | Subscription | Purpose |
 |---|---|
 | `state/+/online` | Detect server presence changes |
-| `m/<own_server_id>/#` | Receive all messages, user sync, etc. destined for this server |
+| `m/+/<own_server_id>/#` | Receive all messages, user sync, and bursts destined for this server |
 
-Unknown endpoints under `m/<own_server_id>/` are logged as warnings.
+Unknown endpoints under `m/+/<own_server_id>/` are logged as warnings.
 
 ## Commands (aiomonitor REPL)
 
 | Command | Description |
 |---|---|
 | `status` | Show known servers and their online/users state |
-| `add <id> <name>` | Add a local user and broadcast to all servers |
+| `add <name>` | Add a local user (auto-generated id) and broadcast to all servers |
 | `del <id>` | Remove a local user and broadcast removal |
 | `msg <userid> <message>` | Send a message to a user on all online servers |
