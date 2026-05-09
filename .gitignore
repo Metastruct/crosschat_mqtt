@@ -12,3 +12,9 @@ stderr.txt
 stderr2.txt
 stdout.txt
 stdout2.txt
+crosschat_lua/lua/autorun/client/chat_teams.lua
+crosschat_lua_old/*
+crosschat_lua/lua/autorun/server/meta_mqtt.lua
+.gitignore
+crosschat_lua/lua/autorun/server/exhibit.lua
+crosschat_lua/cfg/mqtt.cfg

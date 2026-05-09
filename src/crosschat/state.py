@@ -127,17 +127,62 @@ class CrossChatState:
 			for cb in self._ooc_subscribers[ooc_name]:
 				await cb(server, payload, ooc_name)
 
-	def format_status(self) -> str:
-		parts = [f'[Own ID: {self._own_id}]', '']
+	@staticmethod
+	def _c(code: int, text: str) -> str:
+		return f'\033[{code}m{text}\033[0m'
+
+	@staticmethod
+	def _bold(text: str) -> str:
+		return f'\033[1m{text}\033[0m'
+
+	def format_status(self, full: bool = False) -> str:
+		RED = 31
+		GREEN = 32
+		ORANGE = 33
+		BLUE = 34
+		LIGHTBLUE = 36
+		GREY = 90
+		WHITE = 97
+
+		c = self._c
+		parts = [c(WHITE, f'[Own ID: {self._own_id}]'), '']
 		for sid in sorted(self.servers):
 			server = self.servers[sid]
-			badge = 'ONLINE' if server.online else 'OFFLINE'
-			marker = ' (self)' if sid == self._own_id else ''
-			parts.append(f'  {sid}: {badge}{marker}')
+			badge = c(GREEN, 'ONLINE') if server.online else c(RED, 'OFFLINE')
+			marker = c(GREY, ' (self)') if sid == self._own_id else ''
+
+			active = sum(1 for u in server.users.values() if not getattr(u, 'left', None))
+			total = len(server.users)
+			if full:
+				count_str = c(GREY, f' ({active}/{total})')
+			else:
+				count_str = c(GREY, f' ({active})')
+
+			parts.append(f'  {c(ORANGE, sid)}: {badge}{marker}{count_str}')
+
 			for uid in sorted(server.users):
 				user = server.users[uid]
-				ts = user.first_seen.strftime('%Y-%m-%d %H:%M:%S UTC')
-				parts.append(f'    └ {uid} ({user.name})  (since {ts})')
+				left = getattr(user, 'left', False)
+				if not full and left:
+					continue
+				cb = c(GREEN, '  ☑ ') if not left else c(RED, '  ☐ ')
+				uid_str = c(GREY, f'#{uid} ')
+				name_str = c(WHITE, user.name or '?')
+				left_str = c(RED, ' left') if left else ''
+				parts.append(f'{cb}{uid_str}{name_str}{left_str}')
+
+				if full and user.extra:
+					extra_keys = []
+					for k, v in user.extra.items():
+						if isinstance(v, bool):
+							clr = BLUE if v else RED
+						else:
+							clr = LIGHTBLUE
+						extra_keys.append(c(clr, k))
+					if extra_keys:
+						extra_keys.sort()
+						parts.append(f'{c(GREY, "    extra: ")}{", ".join(extra_keys)}')
+
 		if not self.servers:
-			parts.append('  (no servers known)')
+			parts.append(c(GREY, '  (no servers known)'))
 		return '\n'.join(parts)

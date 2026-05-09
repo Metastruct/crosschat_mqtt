@@ -248,7 +248,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiomonitor", specifier = ">=0.7.1" },
-    { name = "aiomqtt", specifier = ">=2.5.1" },
+    { name = "aiomqtt", specifier = "<3.0.0" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.136.1" },
     { name = "paho-mqtt", specifier = ">=2.1.0" },
     { name = "pydantic", specifier = ">=2.13.4" },

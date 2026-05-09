@@ -469,8 +469,8 @@ class CrossChat:
 				def __repr__(self) -> str:
 					return _state.format_status()
 
-				def __call__(self) -> str:
-					return _state.format_status()
+				def __call__(self, full: bool = False) -> str:
+					return _state.format_status(full=full)
 
 			status = _Status()
 			console_locals = {

@@ -42,23 +42,67 @@ end
 serverdata = _RAW.serverdata or {}
 local serverdata = serverdata
 
-concommand.Add('crosschat_status', function()
-	MsgN('[CrossChat] Known servers:')
+concommand.Add('crosschat_status', function(args)
+	local full = type(args) == 'table' and args[1] == 'full'
+	MsgC(white, '[CrossChat] Known servers:\n')
 
 	for _, server in next, serverdata do
-		local count = 0
-		for _ in pairs(server.players) do count = count + 1 end
-		MsgN('  ' .. server.ServerID .. ' (' .. count .. ' players)')
+		local active = 0
 		local sorted = {}
 		for k, v in pairs(server.players) do
+			if not v.left then active = active + 1 end
 			table.insert(sorted, v)
 		end
+		local total = table.Count(server.players)
+		MsgC(orange, '  ' .. server.ServerID)
+		MsgC(grey, ' (' .. active)
+		if full then
+			MsgC(grey, '/' .. total)
+		end
+		MsgC(grey, ' players)\n')
+
 		table.sort(sorted, function(a, b)
 			return a.UserID > b.UserID
 		end)
+
 		for _, ply in pairs(sorted) do
-			if not ply.left then
-				MsgN('\t#' .. ply.UserID .. ' ' .. ply.Name .. ' [' .. (ply.SteamID64 or '?') .. ']')
+			if full or not ply.left then
+				if ply.left then
+					MsgC(red, '  ☐ ')
+				else
+					MsgC(green, '  ☑ ')
+				end
+				MsgC(grey, '#' .. ply.UserID .. ' ')
+				MsgC(white, ply.Name)
+				MsgC(grey, ' [' .. (ply.SteamID64 or '?') .. ']')
+				if ply.left then
+					MsgC(red, ' left')
+				end
+				MsgC(white, '\n')
+
+				if full and ply.extra then
+					local extra_keys = {}
+					for k, v in pairs(ply.extra) do
+						local clr
+						if type(v) == 'boolean' then
+							clr = v and blue or red
+						else
+							clr = lightblue
+						end
+						table.insert(extra_keys, {key = k, color = clr})
+					end
+					if #extra_keys > 0 then
+						table.sort(extra_keys, function(a, b) return a.key < b.key end)
+						MsgC(grey, '    extra: ')
+						for i, entry in ipairs(extra_keys) do
+							MsgC(entry.color, entry.key)
+							if i < #extra_keys then
+								MsgC(grey, ', ')
+							end
+						end
+						MsgC(white, '\n')
+					end
+				end
 			end
 		end
 	end
@@ -66,7 +110,11 @@ end)
 
 concommand.Add('statusall', function()
 	for _, server in next, serverdata do
-		MsgN('Server ' .. server.ServerID .. ':')
+		local count = 0
+		for k, v in pairs(server.players) do
+			if not v.left then count = count + 1 end
+		end
+		MsgN('Server ' .. server.ServerID .. ' (' .. count .. ' players):')
 		local sorted = {}
 
 		for k, v in pairs(server.players) do
@@ -129,6 +177,8 @@ local red = Color(230, 100, 100, 255)
 local blue = Color(150, 200, 255, 255)
 local green = Color(100, 230, 100)
 local grey = Color(200, 200, 200, 255)
+local orange = Color(255, 180, 80, 255)
+local lightblue = Color(150, 200, 255, 255)
 
 local servercolors = {
 	['0'] = Color(100, 255, 100, 255)

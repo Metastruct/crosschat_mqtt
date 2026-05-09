@@ -48,6 +48,14 @@ function DBG(...)
 	print(...)
 end
 
+local white = Color(255, 255, 255, 255)
+local red = Color(230, 100, 100, 255)
+local blue = Color(150, 200, 255, 255)
+local green = Color(100, 230, 100)
+local grey = Color(200, 200, 200, 255)
+local orange = Color(255, 180, 80, 255)
+local lightblue = Color(150, 200, 255, 255)
+
 local SERVER_ID = config.server_id
 local TOPIC_PREFIX = config.topic_prefix or 'crosschat/'
 local META_CONFIG = config.meta or {}
@@ -170,40 +178,97 @@ local function clean_subscribers()
 	end
 end
 
-concommand.Add('crosschat_status', function(ply)
+concommand.Add('crosschat_status', function(ply, cmd, args)
 	if ply and IsValid(ply) and not ply:IsAdmin() and not ply:IsSuperAdmin() then return end
-	MsgN('[CrossChat] Server ID: ', SERVER_ID)
-	MsgN('[CrossChat] Topic Prefix: ', TOPIC_PREFIX)
-	MsgN('[CrossChat] MQTT Connected: ', tostring(mq.connected()))
-	MsgN('')
+	local full = type(args) == 'table' and args[1] == 'full'
+	MsgC(white, '[CrossChat] Server ID: ')
+	MsgC(orange, SERVER_ID)
+	MsgC(white, '\n[CrossChat] Topic Prefix: ')
+	MsgC(grey, TOPIC_PREFIX)
+	MsgC(white, '\n[CrossChat] MQTT Connected: ')
+	MsgC(mq.connected() and green or red, tostring(mq.connected()))
+	MsgC(white, '\n')
 
 	for sid, server in pairs(servers) do
-		local badge = server.online and 'ONLINE' or 'OFFLINE'
+		local badge = server.online and green or red
 		local marker = sid == SERVER_ID and ' (self)' or ''
+		local src
+		local users
 
 		if sid == SERVER_ID then
-			local count = 0
-			for _ in pairs(local_users) do count = count + 1 end
-			MsgN('  ' .. sid .. ': ' .. badge .. marker .. ' (' .. count .. ' users)')
-			for uid, user in pairs(local_users) do
-				if not user.left then
-					MsgN('\t#' .. uid .. ' ' .. (user.name or '?'))
-				end
-			end
+			src = local_users
 		else
-			local count = 0
-			for _ in pairs(server.users) do count = count + 1 end
-			MsgN('  ' .. sid .. ': ' .. badge .. marker .. ' (' .. count .. ' users)')
-			for uid, user in pairs(server.users) do
-				if not user.left then
-					MsgN('\t#' .. uid .. ' ' .. (user.name or '?'))
+			src = server.users
+		end
+
+		local active = 0
+		local user_list = {}
+		for uid, user in pairs(src) do
+			if not user.left then active = active + 1 end
+			table.insert(user_list, {uid = uid, user = user})
+		end
+		table.sort(user_list, function(a, b) return a.uid < b.uid end)
+
+		local total = table.Count(src)
+		MsgC(orange, '  ' .. sid)
+		MsgC(white, ': ')
+		MsgC(badge, server.online and 'ONLINE' or 'OFFLINE')
+		MsgC(grey, marker)
+		MsgC(grey, ' (' .. active)
+		if full then
+			MsgC(grey, '/' .. total)
+		end
+		MsgC(grey, ' users)\n')
+
+		for _, entry in ipairs(user_list) do
+			local uid = entry.uid
+			local user = entry.user
+			if full or not user.left then
+				if user.left then
+					MsgC(red, '  ☐ ')
+				else
+					MsgC(green, '  ☑ ')
+				end
+				MsgC(grey, '#' .. uid .. ' ')
+				MsgC(white, user.name or '?')
+				if user.steamid64 then
+					MsgC(grey, ' [' .. user.steamid64 .. ']')
+				end
+				if user.left then
+					MsgC(red, ' left')
+				end
+				MsgC(white, '\n')
+
+				if full and user.extra then
+					local extra_keys = {}
+					for k, v in pairs(user.extra) do
+						local clr
+						if type(v) == 'boolean' then
+							clr = v and blue or red
+						else
+							clr = lightblue
+						end
+						table.insert(extra_keys, {key = k, color = clr})
+					end
+					if #extra_keys > 0 then
+						table.sort(extra_keys, function(a, b) return a.key < b.key end)
+						MsgC(grey, '    extra: ')
+						for i, entry_key in ipairs(extra_keys) do
+							MsgC(entry_key.color, entry_key.key)
+							if i < #extra_keys then
+								MsgC(grey, ', ')
+							end
+						end
+						MsgC(white, '\n')
+					end
 				end
 			end
 		end
 	end
 
-	MsgN('')
-	MsgN('[CrossChat] Client subscribers: ' .. #subscribers)
+	MsgC(white, '\n[CrossChat] Client subscribers: ')
+	MsgC(orange, tostring(#subscribers))
+	MsgC(white, '\n')
 end)
 
 hook.Add('Think', Tag, clean_subscribers)
