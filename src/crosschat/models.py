@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
 
@@ -35,6 +35,17 @@ class CrossChatUser:
 
 	def __str__(self):
 		return f"<User {self.name} on {self.server.id}>"
+
+
+class UserCommand:
+	ADD = 'add'
+	REMOVE = 'del'
+	UPDATE = 'update'
+
+
+class CrossChatHandler(Protocol):
+	async def on_user(self, user: CrossChatUser, cmd: str) -> None: ...
+	async def on_msg(self, user: CrossChatUser, msg: str) -> None: ...
 
 
 @dataclass

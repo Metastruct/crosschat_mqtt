@@ -6,10 +6,33 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'src'))
 
-from crosschat import CrossChat
+from crosschat import CrossChat, UserCommand
+from crosschat.models import CrossChatUser
+from rich.console import Console
+
+
+console = Console(stderr=True)
 
 
 FAKE_NAMES = ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Hank']
+
+
+class HandlerExample:
+	async def on_user(self, user: CrossChatUser, cmd: str) -> None:
+		style = {
+			UserCommand.ADD: 'green',
+			UserCommand.REMOVE: 'red',
+			UserCommand.UPDATE: 'yellow',
+		}.get(cmd, 'white')
+		action = {
+			UserCommand.ADD: 'added',
+			UserCommand.REMOVE: 'removed',
+			UserCommand.UPDATE: 'updated',
+		}.get(cmd, 'unknown')
+		console.print(f'[bold {style}]user {action}[/] [italic]{user}[/]')
+
+	async def on_msg(self, user: CrossChatUser, msg: str) -> None:
+		console.print(f'[bold blue]message[/] [italic]{user}[/]: {msg}')
 
 
 def parse_args() -> argparse.Namespace:
@@ -29,6 +52,7 @@ async def add_and_broadcast(chat: CrossChat, name: str) -> None:
 
 async def main() -> None:
 	args = parse_args()
+	handler = HandlerExample()
 	chat = CrossChat(
 		config=args.config,
 		host=args.host,
@@ -36,6 +60,7 @@ async def main() -> None:
 		server_id=args.server_id,
 		console_port=args.console_port,
 		verbose=args.verbose,
+		handler=handler,
 	)
 	_infinite = asyncio.Event()
 

@@ -9,7 +9,7 @@ import aiomqtt
 import aiomonitor
 import structlog
 
-from crosschat.models import CrossChatUser
+from crosschat.models import CrossChatHandler, CrossChatUser
 from crosschat.state import CrossChatState
 
 import crosschat.monitor_ext  # noqa: F401
@@ -28,10 +28,12 @@ class CrossChat:
 		server_id: str | None = None,
 		console_port: int | None = None,
 		verbose: bool = False,
+		handler: CrossChatHandler | None = None,
 	):
 		self.state = CrossChatState()
 		self._config: dict = {}
 		self._verbose = verbose
+		self._handler = handler
 		self.shutdown = asyncio.Event()
 
 		if isinstance(config, (str, Path)):
@@ -226,11 +228,12 @@ class CrossChat:
 		user_id = data.get('id')
 		cmd = data.get('cmd', 'add')
 		log.debug('user_message', topic=topic, payload=payload)
+		user: CrossChatUser | None = None
 		if from_sid and from_sid != state._own_id:
 			server = state._ensure_server(from_sid)
 			if cmd == 'del':
-				if user_id in server.users:
-					del server.users[user_id]
+				user = server.users.pop(user_id, None)
+				if user is not None:
 					log.info('user_removed', server_id=from_sid, user_id=user_id)
 			else:
 				first_seen_str = data.get('first_seen')
@@ -246,6 +249,8 @@ class CrossChat:
 				)
 				server.users[user_id] = user
 				log.info('user_added', server_id=from_sid, user_id=user_id, name=user.name)
+		if self._handler is not None and user is not None and cmd in ('add', 'del', 'update'):
+			await self._handler.on_user(user, cmd)
 
 	async def _handle_msg_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
 		state = self.state
@@ -255,6 +260,8 @@ class CrossChat:
 		server = state._ensure_server(from_sid, ensure=True)
 		user = server.get_user(sender_id, ensure=True)
 		log.debug('MESSAGE', sender=user, msg=msg_text)
+		if self._handler is not None:
+			await self._handler.on_msg(user, msg_text)
 
 	async def _handle_ooc_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
 		state = self.state
