@@ -239,6 +239,34 @@ for level in ('debug', 'warning', 'info'):
         getattr(log, _l)('ooc_log', server_id=server.id, ooc_type=name, payload=payload))
 ```
 
+### CrossLua — Remote Lua Execution via OOC
+
+CrossChat supports remote Lua code execution across servers via the `lua` OOC type.
+This is **extremely dangerous** — it gives the sender full server-side code execution
+on the target machine.
+
+| Topic | Payload |
+|---|---|
+| `m/<from>/<to>/ooc/lua` | `{"id": <n>, "code": "<lua code>", "steamid": "<sender>"}` |
+| `m/<from>/<to>/ooc/lua_reply` | `{"id": <n>, "result": "<output or error>"}` |
+
+**Lua-side (`crosslua.lua`)**:
+- The `lua_allow_remote` convar (default `1`) gates incoming execution.
+- Commands: `cl <code>` (broadcast), `bl <code>` (broadcast + execute locally),
+  `cl<ID> <code>` (target specific server).
+- Only developers (aowl group) can use these commands.
+
+**Python-side (aiomonitor REPL)**:
+| Command | Description |
+|---|---|
+| `sendlua <server_id> <code>` | Send Lua code to a server. Replies print asynchronously. |
+
+**⚠️ WARNING**: Remote Lua execution is equivalent to giving shell access.
+Only enable `lua_allow_remote` on trusted networks. All servers on the same
+MQTT broker can send code to each other. There is no sandbox — code runs
+with full server privileges. The `easylua` module (if installed) provides
+some sandboxing but should not be relied upon for security.
+
 ### Subscription
 
 Servers subscribe to the following topics:
@@ -316,6 +344,36 @@ The `CrossChatUser` class provides a `serialize()` method that returns a JSON-se
 | `del <id>` | Remove a local user and broadcast removal |
 | `say <userid> <message>` | Send a message to a user on all online servers |
 | `pm <from_user_id> <target_server_id> <to_user_id> <message>` | Send a private message from a local user to a user on another server |
+
+## C# Implementation
+
+A C# implementation using MQTTnet is available in [`csharp/`](csharp/).
+
+### Requirements
+
+- [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
+- MQTT broker (e.g. Mosquitto, EMQX)
+
+### CLI Usage
+
+```sh
+cd csharp/
+dotnet run -- --config ../config.json
+dotnet run -- --config ../config.json --host 10.0.0.1
+dotnet run -- --server-id myserver --host 10.0.0.1 -v
+```
+
+The REPL supports the same commands as the Python version:
+
+```
+> status                     Show known servers and users
+> add Alice                  Add a local user
+> del 1                      Remove a local user
+> say 1 hello                Send chat message from user
+> pm 1 eu2 2 hi              Send private message
+> sendlua eu2 print('hi')    Send Lua code via OOC (replies print asynchronously)
+> exit                       Shutdown
+```
 
 ## Lua (Garry's Mod) Implementation
 

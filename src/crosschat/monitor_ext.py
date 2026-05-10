@@ -7,6 +7,7 @@ import click
 
 from aiomonitor import monitor_cli
 from aiomonitor.termui.commands import auto_command_done, print_fail
+from crosschat.models import CrossChatHandler
 
 
 @monitor_cli.command(name='status')
@@ -48,7 +49,7 @@ def do_add(ctx: click.Context, name: str) -> None:
 	if state is None or tg is None:
 		print_fail('state or tg not available')
 		return
-	handler: object | None = monitor.console_locals.get('handler')
+	handler: CrossChatHandler | None = monitor.console_locals.get('handler')
 	uid = state._next_seq
 	tg.create_task(_do_add(state, handler, name))
 	click.echo(f'User {uid} ({name}) added with seq {uid}')
@@ -118,7 +119,7 @@ def do_say(ctx: click.Context, user_id: str, message: tuple[str, ...]) -> None:
 		if sid != state._own_id and server.online:
 			targets += 1
 			tg.create_task(state.publish(f'm/{state._own_id}/{sid}/say/{user.id}', payload=payload))
-	handler: object | None = monitor.console_locals.get('handler')
+	handler: CrossChatHandler | None = monitor.console_locals.get('handler')
 	if handler is not None:
 		tg.create_task(handler.on_say(user, say_text))
 	click.echo(f'Message sent to {user_id} ({user.name}) on {targets} online server(s)')
@@ -131,7 +132,11 @@ def do_say(ctx: click.Context, user_id: str, message: tuple[str, ...]) -> None:
 @click.argument('message', nargs=-1, required=False)
 @auto_command_done
 def do_pm(
-	ctx: click.Context, from_user_id: str | None, target_server_id: str | None, to_user_id: str | None, message: tuple[str, ...] | None
+	ctx: click.Context,
+	from_user_id: str | None,
+	target_server_id: str | None,
+	to_user_id: str | None,
+	message: tuple[str, ...] | None,
 ) -> None:
 	"""
 	Send a private message from a local user to a user on another server.
@@ -182,7 +187,55 @@ def do_pm(
 	tg.create_task(
 		state.publish(f'm/{state._own_id}/{target_server_id}/pm/{from_user_id}/{to_user_id}', payload=payload)
 	)
-	click.echo(f'PM sent from #{from_user_id} ({own.users[fuid].name}) to {target_server_id}/#{to_user_id} ({target_server.users[tuid].name})')
+	click.echo(
+		f'PM sent from #{from_user_id} ({own.users[fuid].name}) to {target_server_id}/#{to_user_id} ({target_server.users[tuid].name})'
+	)
+
+
+_lua_seq = 0
+_lua_reply_subscribed = False
+
+
+async def _on_lua_reply(server, payload: str, name: str) -> None:
+	try:
+		data = json.loads(payload)
+	except json.JSONDecodeError:
+		return
+	msg_id = data.get('id')
+	result = data.get('result')
+	if msg_id is not None and result is not None:
+		click.echo(f'[Lua reply id={msg_id} from {server.id}] {result}')
+
+
+@monitor_cli.command(name='sendlua')
+@click.argument('server_id')
+@click.argument('lua_code', nargs=-1, required=True)
+@auto_command_done
+def do_sendlua(ctx: click.Context, server_id: str, lua_code: tuple[str, ...]) -> None:
+	"""
+	Send Lua code to a server via OOC for remote execution.
+
+	Usage: sendlua <server_id> <lua_code>
+	"""
+	monitor = ctx.obj
+	state = monitor.console_locals.get('state')
+	tg = monitor.console_locals.get('tg')
+	if state is None or tg is None:
+		print_fail('state or tg not available')
+		return
+	if server_id not in state.servers:
+		print_fail(f'Server {server_id} not found')
+		return
+	global _lua_seq, _lua_reply_subscribed
+	if not _lua_reply_subscribed:
+		_lua_reply_subscribed = True
+		state.subscribe_ooc('lua_reply', _on_lua_reply)
+	_lua_seq += 1
+	msg_id = _lua_seq
+	code = ' '.join(lua_code)
+	payload = json.dumps({'id': msg_id, 'code': code, 'steamid': 'python'})
+	tg.create_task(state.send_ooc(server_id, 'lua', payload))
+	click.echo(f'Lua sent to {server_id} (id={msg_id}): {code}')
 
 
 @monitor_cli.command(name='exit')

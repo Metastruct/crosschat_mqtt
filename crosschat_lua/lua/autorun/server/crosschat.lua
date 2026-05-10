@@ -33,6 +33,7 @@ _M._RAW = setmetatable({}, {
 })
 
 util.AddNetworkString(Tag)
+_M._ooc_warned = {}
 
 IN_DBG = _RAW.IN_DBG or true
 
@@ -57,6 +58,7 @@ local orange = Color(255, 180, 80, 255)
 local lightblue = Color(150, 200, 255, 255)
 
 local SERVER_ID = config.server_id
+_M.SERVER_ID = SERVER_ID
 local TOPIC_PREFIX = config.topic_prefix or 'crosschat/'
 local META_CONFIG = config.meta or {}
 
@@ -120,6 +122,10 @@ local function get_server(sid)
 	end
 
 	return servers[sid]
+end
+
+function GetTable()
+	return servers or {}
 end
 
 local function broadcast(msg_type, ...)
@@ -453,6 +459,7 @@ end
 	if started > 0 then
 		DBG('Server online:', sid)
 		broadcast('status', sid, 1)
+		hook.Run('CrossChatServerOnline', sid)
 
 		if sid ~= SERVER_ID then
 			local user_list = {}
@@ -665,8 +672,36 @@ function on_mqtt(topic, payload)
 		elseif endpoint == 'pm' and #parts >= 6 then
 			DBG('on_mqtt: pm msg from', from_sid, 'from_user=', parts[5], 'to_user=', parts[6])
 			handle_m_pm(from_sid, parts[5], parts[6], payload)
+		elseif endpoint == 'ooc' and #parts >= 5 then
+			local ooc_type = parts[5]
+			DBG('on_mqtt: ooc msg from', from_sid, 'type=', ooc_type)
+			local handled = hook.Run('CrossChatOOC', from_sid, ooc_type, payload)
+			if not handled and not _M._ooc_warned[ooc_type] then
+				_M._ooc_warned[ooc_type] = true
+				DBG('on_mqtt: no handler for ooc type', ooc_type, 'from', from_sid)
+			end
 		end
 	end
+end
+
+function send_ooc(target_sid, ooc_type, payload)
+	if type(payload) == 'table' then
+		payload = json.encode(payload)
+	end
+	publish('m/' .. SERVER_ID .. '/' .. target_sid .. '/ooc/' .. ooc_type, tostring(payload))
+	DBG('send_ooc: to', target_sid, 'type=', ooc_type)
+end
+
+function broadcast_ooc(ooc_type, payload)
+	local sent = 0
+	for sid, server in pairs(servers) do
+		if sid ~= SERVER_ID and server.online then
+			send_ooc(sid, ooc_type, payload)
+			sent = sent + 1
+		end
+	end
+	DBG('broadcast_ooc: type=', ooc_type, 'sent_to=', sent)
+	return sent
 end
 
 net.Receive(Tag, function(len, ply)
@@ -755,13 +790,20 @@ end
 
 hook.Add('PlayerDisconnected', Tag, handle_player_remove)
 
-hook.Add('ShutDown', Tag, function()
+function _M.ShutDown(reason)
+	reason = reason or 'shutting down'
+	DBG('ShutDown:', reason)
+	pcall(broadcast_ooc, 'shutdown', tostring(reason))
 	hook.Remove('PlayerInitialSpawn', Tag)
 	hook.Remove('PlayerSay', Tag)
 	hook.Remove('PlayerDisconnected', Tag)
 	hook.Remove('Think', Tag)
 	hook.Remove('OnMQTT', Tag)
 	hook.Remove('ShutDown', Tag)
+end
+
+hook.Add('ShutDown', Tag, function()
+	_M.ShutDown('shutting down or changing map')
 end)
 
 local function publish_own_status()

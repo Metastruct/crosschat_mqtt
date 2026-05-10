@@ -501,6 +501,9 @@ public class CrossChatHost
         }
     }
 
+    private int _luaSeq;
+    private bool _luaReplySubscribed;
+
     private async Task RunConsoleLoop()
     {
         while (!Shutdown.Token.IsCancellationRequested)
@@ -525,6 +528,7 @@ public class CrossChatHost
                         Console.WriteLine("  del <id>            Remove a local user");
                         Console.WriteLine("  say <uid> <msg>     Send chat message from user");
                         Console.WriteLine("  pm <from> <sid> <to> <msg>  Send PM");
+                        Console.WriteLine("  sendlua <sid> <code>  Send Lua code to a server via OOC");
                         Console.WriteLine("  exit / quit         Shutdown");
                         break;
 
@@ -632,6 +636,42 @@ public class CrossChatHost
                             if (_handler != null)
                                 await _handler.OnPm(fromUser, targetSid, pmTo, msg);
                             Console.WriteLine($"PM sent from #{pmFrom} ({fromUser.Name}) to {targetSid}/#{pmTo} ({toUser.Name})");
+                        }
+                        break;
+
+                    case "sendlua":
+                        if (args.Length < 3)
+                            Console.WriteLine("Usage: sendlua <server_id> <lua_code>");
+                        else
+                        {
+                            var targetSid = args[1];
+                            if (!State.Servers.ContainsKey(targetSid))
+                            {
+                                Console.WriteLine($"Server {targetSid} not found");
+                                break;
+                            }
+                            if (!_luaReplySubscribed)
+                            {
+                                _luaReplySubscribed = true;
+                                State.SubscribeOoc("lua_reply", (server, payload, name) =>
+                                {
+                                    try
+                                    {
+                                        using var doc = JsonDocument.Parse(payload);
+                                        var id = doc.RootElement.TryGetProperty("id", out var idEl) ? idEl.GetInt32() : -1;
+                                        var result = doc.RootElement.TryGetProperty("result", out var resEl) ? resEl.GetString() : null;
+                                        if (id >= 0 && result != null)
+                                            Console.WriteLine($"[Lua reply id={id} from {server.Id}] {result}");
+                                    }
+                                    catch { }
+                                    return Task.CompletedTask;
+                                });
+                            }
+                            _luaSeq++;
+                            var code = string.Join(" ", args.Skip(2));
+                            var payload = JsonSerializer.Serialize(new { id = _luaSeq, code, steamid = "csharp" });
+                            await State.SendOoc(targetSid, "lua", payload);
+                            Console.WriteLine($"Lua sent to {targetSid} (id={_luaSeq}): {code}");
                         }
                         break;
 
