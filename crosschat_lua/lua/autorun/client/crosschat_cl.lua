@@ -54,7 +54,7 @@ local serverdata = serverdata
 
 concommand.Add('crosschat_status', function(ply, cmd, args, arg_str)
 	local full = arg_str and arg_str:find"full"
-	MsgC(white, '[CrossChat] Known servers:\n')
+	MsgC(white, '[CrossChat] user list:\n')
 
 	for _, server in next, serverdata do
 		local active = 0
@@ -490,44 +490,66 @@ function SendPM(target_server, target_user_id, message)
 	return true
 end
 
-local function pm_autocomplete(ply, cmd, args)
+function PrintPMUsage(cmd)
+	chat.AddText(Color(255, 180, 80, 255), '[CrossChat] ', Color(255, 255, 255, 255), 'Usage: ' .. cmd .. ' <target_server> <target_user_id> <message>')
+	local data = GetTable()
+	for sid, server in pairs(data) do
+		local count = 0
+		for uid, user in pairs(server.players) do
+			if not user.left then
+				chat.AddText(Color(255, 255, 255, 255), '  ' .. sid .. ' #' .. uid .. ' - ' .. (user.Name or '?'))
+				count = count + 1
+			end
+		end
+		if count == 0 then
+			chat.AddText(Color(200, 200, 200, 255), '  ' .. sid .. ': (no players)')
+		end
+	end
+end
+
+local _next_ac_print = 0
+local function pm_autocomplete(cmd, arg_str, args)
 	local t = {}
 	local data = GetTable()
 	local argn = #args
 	if argn == 0 then
+		if os.time() >= _next_ac_print then PrintPMUsage(cmd) end
 		for sid, _ in pairs(data) do
-			table.insert(t, sid)
+			table.insert(t, cmd .. ' ' .. sid)
 		end
 	elseif argn == 1 then
-		local sid = args[1]
-		local server = data[sid]
+		local typed = args[1]
+		local server = data[typed]
 		if server then
 			for uid, user in pairs(server.players) do
 				if not user.left then
-					table.insert(t, tostring(uid) .. ' - ' .. (user.Name or '?'))
+					table.insert(t, cmd .. ' ' .. typed .. ' ' .. tostring(uid) .. ' - ' .. (user.Name or '?'))
+				end
+			end
+		else
+			local typed_lower = typed:lower()
+			for sid, srv in pairs(data) do
+				for uid, user in pairs(srv.players) do
+					if not user.left then
+						local name_match = (user.Name or ''):lower():sub(1, #typed_lower) == typed_lower
+						local id_match = tostring(uid):sub(1, #typed) == typed
+						if name_match or id_match then
+							table.insert(t, cmd .. ' ' .. sid .. ' ' .. tostring(uid) .. ' - ' .. (user.Name or '?'))
+						end
+					end
 				end
 			end
 		end
+	elseif argn >= 2 then
+		table.insert(t, cmd .. ' ' .. args[1] .. ' ' .. args[2].. ' ')
 	end
+	_next_ac_print = os.time() + 60
 	return t
 end
 
 local function pm_cmd(ply, cmd, args, arg_str)
 	if not args[1] or not args[2] then
-		chat.AddText(Color(255, 180, 80, 255), '[CrossChat] ', Color(255, 255, 255, 255), 'Usage: ' .. cmd .. ' <target_server> <target_user_id> <message>')
-		local data = GetTable()
-		for sid, server in pairs(data) do
-			local count = 0
-			for uid, user in pairs(server.players) do
-				if not user.left then
-					chat.AddText(Color(255, 255, 255, 255), '  ' .. sid .. ' #' .. uid .. ' - ' .. (user.Name or '?'))
-					count = count + 1
-				end
-			end
-			if count == 0 then
-				chat.AddText(Color(200, 200, 200, 255), '  ' .. sid .. ': (no players)')
-			end
-		end
+		PrintPMUsage(cmd)
 		return
 	end
 	local target_server = args[1]
