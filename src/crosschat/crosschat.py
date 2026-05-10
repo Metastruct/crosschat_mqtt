@@ -11,7 +11,7 @@ import aiomonitor
 import types
 import structlog
 
-from crosschat.models import BurstFlag, CrossChatHandler, CrossChatUser
+from crosschat.models import PROTOCOL_VERSION, BurstFlag, CrossChatHandler, CrossChatUser, UserCommand
 from crosschat.state import CrossChatState
 
 import crosschat.monitor_ext  # noqa: F401
@@ -167,7 +167,7 @@ class CrossChat:
 		await client.subscribe(f'crosschat/m/+/{state._own_id}/#')
 
 		# broadcast state and set it on us immediately
-		status = {'started': self.started}
+		status = {'started': self.started, 'version': PROTOCOL_VERSION}
 		self.state.set_status(me, self.started)
 		await self.state.publish(f'state/{me}/status', payload=status, retain=True)
 		log.info('state_published', topic=f'state/{me}/status', started=self.started)
@@ -219,7 +219,7 @@ class CrossChat:
 				raise
 		finally:
 			sid = self.state._own_id
-			payload = {'started': self.started}
+			payload = {'started': self.started, 'version': PROTOCOL_VERSION}
 			print('Forcing last will...')
 
 			try:
@@ -265,6 +265,7 @@ class CrossChat:
 				data = json.loads(payload)
 				started = data.get('started', 0)
 			except (json.JSONDecodeError, TypeError):
+				log.warning('invalid_status_payload', server_id=sid, payload=payload)
 				started = 0
 			state._ensure_server(sid)
 			state.set_status(sid, started)
@@ -285,7 +286,6 @@ class CrossChat:
 						user_count = len(users)
 						for i, user in enumerate(users):
 							serialized = user.serialize()
-							serialized['id'] = int(user.id)
 							serialized['cmd'] = 'add'
 							if user_count == 1:
 								serialized['burst'] = BurstFlag.STARTEND.serialize()
@@ -307,6 +307,7 @@ class CrossChat:
 			try:
 				meta_data = json.loads(payload)
 			except json.JSONDecodeError:
+				log.warning('invalid_meta_payload', server_id=sid, payload=payload)
 				meta_data = {}
 			server = state._ensure_server(sid)
 			server.meta = meta_data
@@ -335,14 +336,24 @@ class CrossChat:
 
 	async def _handle_user_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
 		state = self.state
-		data = json.loads(payload)
+		try:
+			data = json.loads(payload)
+		except json.JSONDecodeError:
+			log.warning('invalid_user_payload', topic=topic)
+			return
 		user_id = data.get('id')
+		if not isinstance(user_id, int):
+			log.warning('invalid_user_id', topic=topic, user_id=user_id)
+			return
 		cmd = data.get('cmd', 'add')
+		if cmd not in (UserCommand.ADD, UserCommand.REMOVE, UserCommand.UPDATE):
+			log.warning('unknown_user_cmd', topic=topic, cmd=cmd)
+			return
 		log.debug('user_message', topic=topic, payload=payload)
 		user: CrossChatUser | None = None
 		if from_sid and from_sid != state._own_id:
 			server = state._ensure_server(from_sid)
-			if cmd == 'del':
+			if cmd == UserCommand.REMOVE:
 				user = server.users.pop(user_id, None)
 				if user is not None:
 					log.info('user_removed', server_id=from_sid, user_id=user_id)
@@ -377,8 +388,16 @@ class CrossChat:
 
 	async def _handle_say_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
 		state = self.state
-		sender_id = int(parts[5])
-		data = json.loads(payload)
+		try:
+			sender_id = int(parts[5])
+		except (ValueError, IndexError):
+			log.warning('invalid_say_sender_id', topic=topic)
+			return
+		try:
+			data = json.loads(payload)
+		except json.JSONDecodeError:
+			log.warning('invalid_say_payload', topic=topic)
+			return
 		say_text = data.get('say', '')
 		server = state._ensure_server(from_sid, ensure=True)
 		user = server.get_user(sender_id, ensure=True)
@@ -395,9 +414,17 @@ class CrossChat:
 
 	async def _handle_pm_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
 		state = self.state
-		from_user_id = int(parts[5])
-		to_user_id = int(parts[6])
-		data = json.loads(payload)
+		try:
+			from_user_id = int(parts[5])
+			to_user_id = int(parts[6])
+		except (ValueError, IndexError):
+			log.warning('invalid_pm_user_id', topic=topic)
+			return
+		try:
+			data = json.loads(payload)
+		except json.JSONDecodeError:
+			log.warning('invalid_pm_payload', topic=topic)
+			return
 		say_text = data.get('say', '')
 		sender_server = state.servers.get(from_sid)
 		sender_user = sender_server.users.get(from_user_id) if sender_server else None
@@ -431,7 +458,7 @@ class CrossChat:
 
 		will = aiomqtt.Will(
 			topic=f'{prefix}state/{sid}/status',
-			payload=json.dumps({'started': 0}),
+			payload=json.dumps({'started': 0, 'version': PROTOCOL_VERSION}),
 			qos=1,
 			retain=True,
 		)

@@ -116,7 +116,7 @@ public class CrossChatHost
         var factory = new MqttClientFactory();
         var client = factory.CreateMqttClient();
 
-        var willPayload = JsonSerializer.Serialize(new Dictionary<string, object> { ["started"] = 0 });
+        var willPayload = JsonSerializer.Serialize(new Dictionary<string, object> { ["started"] = 0, ["version"] = Protocol.Version });
 
         var options = new MqttClientOptionsBuilder()
             .WithTcpServer(host, port)
@@ -191,7 +191,7 @@ public class CrossChatHost
             .WithTopicFilter($"{_prefix}m/+/{_sid}/#", MqttQualityOfServiceLevel.AtMostOnce)
             .Build());
 
-        var statusPayload = JsonSerializer.Serialize(new Dictionary<string, object> { ["started"] = _started });
+        var statusPayload = JsonSerializer.Serialize(new Dictionary<string, object> { ["started"] = _started, ["version"] = Protocol.Version });
         State.SetStatus(_sid, _started);
         await State.Publish($"state/{_sid}/status", statusPayload, retain: true);
         Console.WriteLine($"Published state/{_sid}/status: started={_started}");
@@ -241,7 +241,10 @@ public class CrossChatHost
                 using var doc = JsonDocument.Parse(payload);
                 started = doc.RootElement.TryGetProperty("started", out var s) ? s.GetInt64() : 0;
             }
-            catch { }
+            catch
+            {
+                Console.Error.WriteLine($"Invalid status payload from {sid}");
+            }
 
             State.EnsureServer(sid);
             State.SetStatus(sid, started);
@@ -271,7 +274,6 @@ public class CrossChatHost
                         {
                             var user = users[i];
                             var serialized = user.Serialize();
-                            serialized["id"] = user.Id;
                             serialized["cmd"] = "add";
 
                             var flag = userCount == 1 ? BurstFlag.Startend
@@ -298,7 +300,10 @@ public class CrossChatHost
                     metaDict[prop.Name] = prop.Value.ToString();
                 server.Meta = metaDict;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Invalid meta payload from {sid}: {ex.Message}");
+            }
         }
         else
         {
@@ -375,8 +380,21 @@ public class CrossChatHost
         {
             using var doc = JsonDocument.Parse(payload);
             var root = doc.RootElement;
-            var userId = JsonToInt(root, "id");
-            var cmd = root.TryGetProperty("cmd", out var cmdEl) ? cmdEl.GetString() ?? "add" : "add";
+
+            var userId = root.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.Number
+                ? idEl.GetInt32() : -1;
+            if (userId < 0)
+            {
+                Console.Error.WriteLine($"Invalid user id in message from {fromSid}");
+                return;
+            }
+
+            var cmd = root.TryGetProperty("cmd", out var cmdEl) ? cmdEl.GetString() ?? "" : "";
+            if (cmd is not ("add" or "del" or "update"))
+            {
+                Console.Error.WriteLine($"Unknown user cmd '{cmd}' from {fromSid}");
+                return;
+            }
 
             CrossChatUser? user = null;
             var server = State.EnsureServer(fromSid);
@@ -395,7 +413,7 @@ public class CrossChatHost
                 foreach (var prop in root.EnumerateObject())
                 {
                     if (!known.Contains(prop.Name))
-                        extra[prop.Name] = JsonElementToValue(prop.Value);
+                        extra[prop.Name] = JsonElementToValue(prop.Value)!;
                 }
 
                 user = new CrossChatUser
@@ -425,9 +443,9 @@ public class CrossChatHost
             if (_handler != null && user != null && cmd is "add" or "del" or "update")
                 await _handler.OnUser(user, cmd, burst);
         }
-        catch (JsonException ex)
+        catch (Exception ex)
         {
-            Console.Error.WriteLine($"Invalid user message JSON: {ex.Message}");
+            Console.Error.WriteLine($"Error handling user message from {fromSid}: {ex}");
         }
     }
 

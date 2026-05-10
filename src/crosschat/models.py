@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger()
 
+PROTOCOL_VERSION = 1
+
 
 @dataclass
 class CrossChatUser:
@@ -25,6 +27,7 @@ class CrossChatUser:
 
 	def serialize(self) -> dict[Any, Any]:
 		result = {
+			'id': self.id,
 			'name': self.name,
 			'first_seen': int(self.first_seen.timestamp()),
 			'server': self.server.id,
@@ -57,9 +60,9 @@ class BurstFlag(enum.Enum):
 
 	@classmethod
 	def deserialize(cls, value: Any, default: BurstFlag | None = None) -> BurstFlag:
-		if value is False or value == 'false':
+		if value is False:
 			return cls.NONE
-		if value is True or value == 'true':
+		if value is True:
 			return cls.ACTIVE
 		if value == 'startend':
 			return cls.STARTEND
@@ -135,7 +138,6 @@ class CrossChatServer:
 
 		if state._client is not None:
 			user_data = user.serialize()
-			user_data['id'] = user.id
 			user_data['cmd'] = 'add'
 			user_data['burst'] = BurstFlag.NONE.serialize()
 			payload = json.dumps(user_data)

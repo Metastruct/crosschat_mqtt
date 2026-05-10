@@ -3,6 +3,11 @@ using System.Text.Json.Nodes;
 
 namespace CrossChat;
 
+public static class Protocol
+{
+    public const int Version = 1;
+}
+
 public class CrossChatUser
 {
     public string Name { get; set; } = string.Empty;
@@ -15,6 +20,7 @@ public class CrossChatUser
     {
         var result = new JsonObject
         {
+            ["id"] = Id,
             ["name"] = Name,
             ["first_seen"] = new DateTimeOffset(FirstSeen).ToUnixTimeSeconds(),
             ["server"] = Server.Id,
@@ -177,7 +183,6 @@ public class CrossChatServer
         if (state.Client != null)
         {
             var userData = user.Serialize();
-            userData["id"] = userId;
             userData["cmd"] = "add";
             userData["burst"] = BurstFlag.None.Serialize();
             var payload = userData.ToJsonString();

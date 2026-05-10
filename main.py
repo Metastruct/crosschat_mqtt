@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 import json
-import os
 import random
 import sys
 from pathlib import Path
@@ -76,11 +75,11 @@ async def main() -> int:
 					await asyncio.sleep(6)
 					for uid in fake_user_ids:
 						payload = json.dumps({'say': f'Hello from user {uid}'})
-						for sid, server in chat.state.servers.items():
-							if sid != chat.state._own_id and server.online:
-								tg.create_task(
-									chat.state.publish(f'm/{chat.state._own_id}/{sid}/say/{uid}', payload=payload)
-								)
+					for sid, server in list(chat.state.servers.items()):
+						if sid != chat.state._own_id and server.online:
+							tg.create_task(
+								chat.state.publish(f'm/{chat.state._own_id}/{sid}/say/{uid}', payload=payload)
+							)
 						user = chat.state.servers[chat.state._own_id].users.get(uid)
 						if user:
 							tg.create_task(handler.on_say(user, f'Hello from user {uid}'))

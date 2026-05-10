@@ -5,6 +5,12 @@ Everything was written by AI, sorry. This is for thinking if it makes any sense.
 
 ## TODO
 
+ - ALL / protocol
+   - HIGH: protocol versioning — add `proto_ver` to server meta for compatibility
+   - MED: consistent burst encoding — use strings only (`"none"`, `"active"`, etc.) instead of mixing `bool`/`str`
+   - MED: remove redundant `server` field from user payload — already implied by MQTT topic
+   - MED: keepalive mechanism — application-level ping/pong
+   - LOW: standardized error reporting via OOC
  - Lua
    - Server
       - HIGH: private messaging
@@ -16,14 +22,14 @@ Everything was written by AI, sorry. This is for thinking if it makes any sense.
 	  - FEAT: Fix gmod/meta scoreboard to accept format with no steamid
  - Python
    - library
-      - HIGH: private messaging
+      - HIGH: private messaging — wire up `on_pm` handler, remove stub
    - webchat frontend
       - FEAT: "scoreboard"
 	  - FEAT: actual chat view instead of debug view
       - HIGH: private messaging
 	  - HIGH: steam login (and/or discord?)
    - daemon
-	  - HIGH: steam login? (where to fetc bans?)
+	  - HIGH: steam login? (where to fetch bans?)
 	  - HIGH: Finish PM Interface
       - IDEA: publish chat log stream for website
 	  - IDEA: authenticate via JWT to talk via websocket/etc from ingame
@@ -41,11 +47,11 @@ Everything was written by AI, sorry. This is for thinking if it makes any sense.
    - Unimplemented
    - discord bridge. Replaces metaconcord bridge: https://github.com/Metastruct/node-metaconcord/
    - https://github.com/Metastruct/node-metaconcord/blob/master/app/services/gamebridge/payloads/ChatPayload.ts
- - ALL / misc
+ - Misc
    - FEAT: avatars  
    - BUG: ai smell
-   - FEAT: keepalive?
-   - 
+   - FEAT: keepalive
+   - Python tests — no test suite exists yet
 ## Requirements
 
 - Python >= 3.14
@@ -142,12 +148,20 @@ The `from_server` is identified by the topic rather than the payload.
 
 | Topic | Payload | Retained |
 |---|---|---|
-| `state/<server_id>/status` | `{"started": <unix timestamp>}` / `{"started": 0}` | Yes (with LWT) |
+| `state/<server_id>/status` | `{"started": <unix timestamp>, "version": <proto ver>}` / `{"started": 0, "version": <proto ver>}` | Yes (with LWT) |
 | `state/<server_id>/meta` | `{...}` (JSON object) | Yes |
 
-`status` is published on connect with the current unix timestamp; broker auto-publishes `{"started": 0}` via Last Will on disconnect.
+`status` is published on connect with the current unix timestamp and protocol version (`PROTOCOL_VERSION = 1`); broker auto-publishes `{"started": 0}` via Last Will on disconnect.
 When a server reconnects with a changed `started` timestamp, a new user burst is triggered.
 `meta` is published once on connect with the contents of the `meta` key from config.json.
+
+### Quality of Service
+
+All server-to-server messages (`m/<from>/<to>/...`) and retained state (`state/<server_id>/...`) are published at **QoS 2** (exactly-once delivery) via `CrossChatState.publish()`. This guarantees no duplicates for user sync, messages, and state — critical for correct user tracking across servers.
+
+The Last Will message uses **QoS 1** (at-least-once delivery), since a duplicate offline signal is harmless and the LWT is not resent by the broker.
+
+MQTT subscriptions use broker-default QoS (mapped to the publisher's QoS by the broker).
 
 ### Dynamic State
 

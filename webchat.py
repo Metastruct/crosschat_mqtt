@@ -2,12 +2,16 @@ import json
 import sys
 from pathlib import Path
 
+import structlog
+
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'src'))
 
 from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
 
 from crosschat.models import BurstFlag, CrossChatServer, CrossChatUser
+
+log = structlog.get_logger()
 
 app = FastAPI()
 app.state.ws_clients: set[WebSocket] = set()
@@ -61,7 +65,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 			'started': srv.started,
 			'meta': srv.meta,
 			'states': srv.states,
-			'users': [{'id': uid, **user.serialize()} for uid, user in srv.users.items()],
+			'users': [user.serialize() for user in srv.users.values()],
 		}
 		for sid, srv in state.servers.items()
 	]
@@ -111,7 +115,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 			else:
 				await ws.send_text(json.dumps({'cmd': 'error', 'msg': f'unknown cmd: {cmd}'}))
 	except Exception:
-		pass
+		log.exception('websocket_handler_error')
 	finally:
 		app.state.ws_clients.discard(ws)
 
