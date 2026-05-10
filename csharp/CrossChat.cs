@@ -669,8 +669,7 @@ public class CrossChatHost
                             }
                             _luaSeq++;
                             var code = string.Join(" ", args.Skip(2));
-                            var payload = JsonSerializer.Serialize(new { id = _luaSeq, code, steamid = "csharp" });
-                            await State.SendOoc(targetSid, "lua", payload);
+                            await State.SendOoc(targetSid, "lua", new { id = _luaSeq, code, steamid = "csharp" });
                             Console.WriteLine($"Lua sent to {targetSid} (id={_luaSeq}): {code}");
                         }
                         break;

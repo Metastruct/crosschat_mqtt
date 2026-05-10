@@ -1,7 +1,10 @@
 # Crosschat (mqtt edition) (WIP)
 
 Game server cross-chat via MQTT.
-Everything was written by AI, sorry. This is for thinking if it makes any sense.
+
+> **Warning**  
+> Everything here was written by AI. This is for thinking if it makes any sense.  
+> **C# has had the least eyeballs** — it may be buggy or incomplete. Use Python or Lua for anything critical.
 
 ## TODO
 
@@ -261,11 +264,11 @@ on the target machine.
 |---|---|
 | `sendlua <server_id> <code>` | Send Lua code to a server. Replies print asynchronously. |
 
-**⚠️ WARNING**: Remote Lua execution is equivalent to giving shell access.
-Only enable `lua_allow_remote` on trusted networks. All servers on the same
-MQTT broker can send code to each other. There is no sandbox — code runs
-with full server privileges. The `easylua` module (if installed) provides
-some sandboxing but should not be relied upon for security.
+> **Warning** — Remote Lua execution is equivalent to giving shell access.  
+> Only enable `lua_allow_remote` on trusted networks. All servers on the same  
+> MQTT broker can send code to each other. There is no sandbox — code runs  
+> with full server privileges. The `easylua` module (if installed) provides  
+> some sandboxing but should not be relied upon for security.
 
 ### Subscription
 
