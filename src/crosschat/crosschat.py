@@ -439,7 +439,8 @@ class CrossChat:
 			to_name=receiver_user.name if receiver_user else '?',
 			say=say_text,
 		)
-		log.error('not implemented')
+		if self._handler is not None and sender_user is not None:
+			await self._handler.on_pm(sender_user, state._own_id, to_user_id, say_text)
 
 	async def run(self, tg: asyncio.TaskGroup) -> None:
 		self.setup_logging(self._verbose)

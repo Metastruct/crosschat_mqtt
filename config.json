@@ -9,6 +9,9 @@
 	"webchat_host": "0.0.0.0",
 	"webchat_port": 8765,
 	"topic_prefix": "crosschat/",
+	"webchat": {
+		"report_client_errors": true
+	},
 	"meta": {
 		"link": "steam://connect/164.92.180.157:27015/metaweb"
 	}

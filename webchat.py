@@ -7,6 +7,7 @@ import structlog
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'src'))
 
 from fastapi import FastAPI, WebSocket
+from starlette.websockets import WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
 from crosschat.models import BurstFlag, CrossChatServer, CrossChatUser
@@ -34,6 +35,16 @@ class WebchatHandler:
 
 	async def on_say(self, user: CrossChatUser, say: str) -> None:
 		await self._broadcast({'cmd': 'say', 'user': user.serialize(), 'say': say})
+
+	async def on_pm(self, sender: CrossChatUser, target_server_id: str, target_user_id: int, say: str) -> None:
+		await self._broadcast({
+			'cmd': 'pm',
+			'from_server': sender.server.id,
+			'from_user': sender.serialize(),
+			'to_server': target_server_id,
+			'to_user_id': target_user_id,
+			'say': say,
+		})
 
 	async def on_server_add(self, server: CrossChatServer) -> None:
 		await self._broadcast({'cmd': 'server_add', 'id': server.id})
@@ -112,12 +123,42 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 				await handler.on_say(user, say_text)
 				await ws.send_text(json.dumps({'cmd': 'say_sent'}))
 
+			elif cmd == 'pm':
+				if user_id is None:
+					await ws.send_text(json.dumps({'cmd': 'error', 'msg': 'must join first'}))
+					continue
+				target_server = payload.get('server', '')
+				target_user_id = payload.get('to_user_id')
+				pm_text = payload.get('say', '')
+				if not target_server or target_user_id is None or not pm_text:
+					await ws.send_text(json.dumps({'cmd': 'error', 'msg': 'server, to_user_id, say required'}))
+					continue
+				await state.publish(
+					f'm/{state._own_id}/{target_server}/pm/{user_id}/{target_user_id}',
+					payload=json.dumps({'say': pm_text}),
+				)
+				sender = state.servers[state._own_id].users.get(user_id)
+				if sender:
+					await handler.on_pm(sender, target_server, target_user_id, pm_text)
+				await ws.send_text(json.dumps({'cmd': 'pm_sent'}))
+
+			elif cmd == 'client_error':
+				report = ws.app.state.crosschat._config.get('webchat', {}).get('report_client_errors', True)
+				if report:
+					log.error('webchat_client_error', msg=payload.get('msg'), stack=payload.get('stack'))
+
 			else:
 				await ws.send_text(json.dumps({'cmd': 'error', 'msg': f'unknown cmd: {cmd}'}))
+	except WebSocketDisconnect:
+		log.info('websocket_disconnect')
 	except Exception:
 		log.exception('websocket_handler_error')
 	finally:
 		app.state.ws_clients.discard(ws)
+		if user_id is not None:
+			user = await state.del_user(user_id)
+			if user:
+				await handler.on_user(user, 'del')
 
 
 static_dir = Path(__file__).resolve().parent / 'static'

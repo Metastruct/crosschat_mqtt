@@ -125,13 +125,13 @@ def do_say(ctx: click.Context, user_id: str, message: tuple[str, ...]) -> None:
 
 
 @monitor_cli.command(name='pm')
-@click.argument('from_user_id')
-@click.argument('target_server_id')
-@click.argument('to_user_id')
-@click.argument('message', nargs=-1, required=True)
+@click.argument('from_user_id', required=False)
+@click.argument('target_server_id', required=False)
+@click.argument('to_user_id', required=False)
+@click.argument('message', nargs=-1, required=False)
 @auto_command_done
 def do_pm(
-	ctx: click.Context, from_user_id: str, target_server_id: str, to_user_id: str, message: tuple[str, ...]
+	ctx: click.Context, from_user_id: str | None, target_server_id: str | None, to_user_id: str | None, message: tuple[str, ...] | None
 ) -> None:
 	"""
 	Send a private message from a local user to a user on another server.
@@ -145,12 +145,44 @@ def do_pm(
 	if state is None or client is None or tg is None:
 		print_fail('state, client or tg not available')
 		return
+	if not from_user_id or not target_server_id or not to_user_id or not message:
+		print_fail('Usage: pm <from_user_id> <target_server_id> <to_user_id> <message>')
+		click.echo('')
+		click.echo('Available users:')
+		for sid, server in state.servers.items():
+			badge = 'ONLINE' if server.online else 'OFFLINE'
+			click.echo(f'  {sid} ({badge}):')
+			for uid in sorted(server.users):
+				user = server.users[uid]
+				click.echo(f'    #{uid} - {user.name or "?"}')
+		return
+	try:
+		fuid = int(from_user_id)
+	except ValueError:
+		print_fail(f'Invalid from_user_id: {from_user_id}')
+		return
+	try:
+		tuid = int(to_user_id)
+	except ValueError:
+		print_fail(f'Invalid to_user_id: {to_user_id}')
+		return
+	own = state.servers.get(state._own_id)
+	if own is None or fuid not in own.users:
+		print_fail(f'Local user #{from_user_id} not found')
+		return
+	target_server = state.servers.get(target_server_id)
+	if target_server is None or not target_server.online:
+		print_fail(f'Target server {target_server_id} not found or offline')
+		return
+	if tuid not in target_server.users:
+		print_fail(f'Target user #{to_user_id} not found on {target_server_id}')
+		return
 	say_text = ' '.join(message)
 	payload = json.dumps({'say': say_text})
 	tg.create_task(
 		state.publish(f'm/{state._own_id}/{target_server_id}/pm/{from_user_id}/{to_user_id}', payload=payload)
 	)
-	click.echo(f'PM sent from {from_user_id} to {target_server_id}/{to_user_id}')
+	click.echo(f'PM sent from #{from_user_id} ({own.users[fuid].name}) to {target_server_id}/#{to_user_id} ({target_server.users[tuid].name})')
 
 
 @monitor_cli.command(name='exit')

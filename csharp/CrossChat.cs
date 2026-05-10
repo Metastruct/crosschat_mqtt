@@ -475,7 +475,7 @@ public class CrossChatHost
         await State.NotifyOoc(server, oocName, payload);
     }
 
-    private Task HandlePmMessage(string fromSid, string[] parts, string payload)
+    private async Task HandlePmMessage(string fromSid, string[] parts, string payload)
     {
         try
         {
@@ -491,13 +491,14 @@ public class CrossChatHost
 
             Console.WriteLine($"PM from {fromSid}/{fromUserId} ({senderUser?.Name ?? "?"}) " +
                             $"to {State.OwnId}/{toUserId} ({receiverUser?.Name ?? "?"}): {sayText}");
-            Console.WriteLine("PM not fully implemented");
+
+            if (_handler != null && senderUser != null)
+                await _handler.OnPm(senderUser, State.OwnId, toUserId, sayText);
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Error handling PM: {ex.Message}");
         }
-        return Task.CompletedTask;
     }
 
     private async Task RunConsoleLoop()
@@ -590,14 +591,47 @@ public class CrossChatHost
 
                     case "pm":
                         if (args.Length < 5)
+                        {
                             Console.WriteLine("Usage: pm <from_uid> <sid> <to_uid> <message>");
+                            Console.WriteLine();
+                            Console.WriteLine("Available users:");
+                            foreach (var sid in State.Servers.Keys.OrderBy(k => k))
+                            {
+                                var srv = State.Servers[sid];
+                                var badge = srv.Online ? "ONLINE" : "OFFLINE";
+                                Console.WriteLine($"  {sid} ({badge}):");
+                                foreach (var uid in srv.Users.Keys.OrderBy(k => k))
+                                {
+                                    var u = srv.Users[uid];
+                                    Console.WriteLine($"    #{uid} - {u.Name ?? "?"}");
+                                }
+                            }
+                        }
                         else if (int.TryParse(args[1], out var pmFrom) && int.TryParse(args[3], out var pmTo))
                         {
                             var targetSid = args[2];
+                            var ownServer = State.Me();
+                            if (!ownServer.Users.TryGetValue(pmFrom, out var fromUser))
+                            {
+                                Console.WriteLine($"Local user #{pmFrom} not found");
+                                break;
+                            }
+                            if (!State.Servers.TryGetValue(targetSid, out var targetServer) || !targetServer.Online)
+                            {
+                                Console.WriteLine($"Target server {targetSid} not found or offline");
+                                break;
+                            }
+                            if (!targetServer.Users.TryGetValue(pmTo, out var toUser))
+                            {
+                                Console.WriteLine($"Target user #{pmTo} not found on {targetSid}");
+                                break;
+                            }
                             var msg = string.Join(" ", args.Skip(4));
                             var payload = JsonSerializer.Serialize(new { say = msg });
                             await State.Publish($"m/{State.OwnId}/{targetSid}/pm/{pmFrom}/{pmTo}", payload);
-                            Console.WriteLine($"PM sent from {pmFrom} to {targetSid}/{pmTo}");
+                            if (_handler != null)
+                                await _handler.OnPm(fromUser, targetSid, pmTo, msg);
+                            Console.WriteLine($"PM sent from #{pmFrom} ({fromUser.Name}) to {targetSid}/#{pmTo} ({toUser.Name})");
                         }
                         break;
 

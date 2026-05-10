@@ -14,9 +14,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 #status .dot { width: 10px; height: 10px; border-radius: 50%; background: #484f58; flex-shrink: 0; }
 #status .dot.connected { background: #3fb950; }
 #status .dot.disconnected { background: #f85149; }
+#main { flex: 1; display: flex; gap: 8px; overflow: hidden; min-height: 0; }
 #log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding: 4px 0; font-size: 13px; }
 #log::-webkit-scrollbar { width: 6px; }
 #log::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+#user-list { width: 220px; overflow-y: auto; background: #161b22; border: 1px solid #21262d; border-radius: 6px; padding: 6px 0; font-size: 12px; display: none; flex-shrink: 0; }
+#user-list::-webkit-scrollbar { width: 5px; }
+#user-list::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+#user-list-toggle { background: none; border: 1px solid #30363d; color: #8b949e; border-radius: 4px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
+#user-list-toggle:hover { color: #e6edf3; border-color: #484f58; }
+.ul-server { padding: 4px 10px 2px; color: #8b949e; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+.ul-server .ul-badge { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.ul-user { padding: 2px 10px 2px 20px; cursor: pointer; color: #e6edf3; display: flex; gap: 6px; align-items: center; }
+.ul-user:hover { background: #1c2128; }
+.ul-user .ul-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.ul-user .ul-dot.online { background: #3fb950; }
+.ul-user .ul-dot.left { background: #484f58; }
+.ul-user .ul-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ul-user .ul-id { color: #484f58; font-size: 10px; }
 .entry { padding: 4px 8px; border-radius: 6px; background: #161b22; display: flex; flex-direction: column; gap: 2px; }
 .entry .head { font-size: 11px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
 .entry .head .tag { display: inline-block; padding: 0 6px; border-radius: 3px; font-size: 10px; text-transform: uppercase; }
@@ -66,10 +81,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 	<span class="dot disconnected" id="dot"></span>
 	<span id="status-text">disconnected</span>
 	<span style="flex:1"></span>
+	<button id="user-list-toggle">Users</button>
 	<span id="server-count" style="font-size:11px;color:#484f58"></span>
 </div>
 
-<div id="log"></div>
+<div id="main">
+	<div id="log"></div>
+	<div id="user-list"></div>
+</div>
 
 <div id="controls">
 	<div id="join-area">
@@ -82,6 +101,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 		<span>Joined as</span>
 		<span class="badge" id="joined-badge">—</span>
 		<button id="leave-btn" style="background:transparent;border:1px solid #30363d;color:#8b949e;border-radius:6px;padding:4px 12px;font-size:11px;cursor:pointer;margin-left:auto">Leave</button>
+	</div>
+
+	<div id="pm-area" style="display:none;gap:6px;align-items:center;font-size:12px;color:#8b949e;background:#1c2128;border:1px solid #30363d;border-radius:6px;padding:6px 10px;">
+		<span>PM to</span>
+		<span id="pm-target" style="color:#58a6ff;font-weight:600"></span>
+		<input id="pm-input" placeholder="Type PM..." style="flex:1;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#e6edf3;font-size:12px;padding:6px 8px;outline:none;">
+		<button id="pm-send" style="background:#1f6feb;color:#fff;border:none;border-radius:4px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;">Send PM</button>
+		<button id="pm-cancel" style="background:transparent;border:1px solid #30363d;color:#8b949e;border-radius:4px;padding:6px 10px;font-size:11px;cursor:pointer;">Cancel</button>
 	</div>
 
 	<div id="msg-row">
@@ -115,10 +142,40 @@ const msgSend = $('msg-send');
 const jsonInput = $('json-input');
 const jsonSend = $('json-send');
 
+const pmArea = $('pm-area');
+const pmTarget = $('pm-target');
+const pmInput = $('pm-input');
+const pmSend = $('pm-send');
+const pmCancel = $('pm-cancel');
+
+const userList = $('user-list');
+const userListToggle = $('user-list-toggle');
+let servers = {};
+let userListVisible = false;
+
 let ws = null;
 let joined = false;
 let myUserId = null;
 let myName = '';
+
+// --- Client error reporting ---
+function reportError(msg, stack) {
+	if (!ws || ws.readyState !== WebSocket.OPEN) return;
+	try {
+		ws.send(JSON.stringify({cmd: 'client_error', msg: String(msg), stack: String(stack || '')}));
+	} catch {}
+}
+window.onerror = function(msg, url, line, col, err) {
+	reportError(msg, (err && err.stack) || url + ':' + line);
+};
+window.addEventListener('unhandledrejection', function(e) {
+	reportError(e.reason && e.reason.message || String(e.reason), e.reason && e.reason.stack || '');
+});
+
+// --- PM state ---
+let pmTargetServer = '';
+let pmTargetUserId = null;
+let pmTargetName = '';
 
 function connect() {
 	ws = new WebSocket('ws://' + location.host + '/ws');
@@ -136,6 +193,8 @@ function connect() {
 		joined = false;
 		myUserId = null;
 		myName = '';
+		servers = {};
+		renderUserList();
 		joinArea.style.display = 'flex';
 		joinedInfo.style.display = 'none';
 		msgInput.disabled = true;
@@ -163,6 +222,14 @@ function handleMessage(raw) {
 		case 'server_list':
 			addEntry('system', 'Connected to ' + msg.servers.length + ' server(s)', raw);
 			serverCount.textContent = msg.servers.length + ' server(s)';
+			servers = {};
+			for (const s of msg.servers) {
+				servers[s.id] = {id: s.id, name: s.name || s.id, online: s.online !== false, users: {}};
+				if (s.users) {
+					for (const u of s.users) servers[s.id].users[u.id] = {id: u.id, name: u.name, server: s.id};
+				}
+			}
+			renderUserList();
 			break;
 
 		case 'joined':
@@ -180,6 +247,17 @@ function handleMessage(raw) {
 
 		case 'user':
 			addEntry('received', makeUserText(msg), raw);
+			{
+				const sid = msg.from_server || (msg.user && msg.user.server) || '';
+				if (msg.user && sid && servers[sid]) {
+					if (msg.action === 'add' || msg.action === 'update') {
+						servers[sid].users[msg.user.id] = {id: msg.user.id, name: msg.user.name, server: sid};
+					} else if (msg.action === 'del') {
+						delete servers[sid].users[msg.user.id];
+					}
+					renderUserList();
+				}
+			}
 			break;
 
 		case 'say':
@@ -194,16 +272,32 @@ function handleMessage(raw) {
 			addEntry('received', 'Echo reply: i=' + msg.i, raw);
 			break;
 
+		case 'pm':
+			addEntry('pm', '<span class="chat-user" style="cursor:pointer" onclick="pmUser(\'' + esc(msg.from_server) + '\',' + (msg.from_user ? msg.from_user.id : 0) + ',\'' + esc((msg.from_user || {}).name || '?') + '\')">' + esc((msg.from_user || {}).name || '?') + '</span> <span class="info">PM:</span> <span class="chat-msg">' + esc(msg.say || '') + '</span>', raw);
+			break;
+
+		case 'pm_sent':
+			addEntry('system', 'PM sent', raw);
+			break;
+
 		case 'server_add':
 			addEntry('system', 'Server added: ' + msg.id, raw);
+			servers[msg.id] = {id: msg.id, name: msg.name || msg.id, online: true, users: {}};
+			serverCount.textContent = Object.keys(servers).length + ' server(s)';
+			renderUserList();
 			break;
 
 		case 'server_del':
 			addEntry('system', 'Server removed: ' + msg.id, raw);
+			delete servers[msg.id];
+			serverCount.textContent = Object.keys(servers).length + ' server(s)';
+			renderUserList();
 			break;
 
 		case 'server_status':
 			addEntry('system', 'Server ' + msg.id + ' is ' + (msg.online ? 'online' : 'offline'), raw);
+			if (servers[msg.id]) servers[msg.id].online = msg.online;
+			renderUserList();
 			break;
 
 		case 'error':
@@ -219,12 +313,14 @@ function makeUserText(msg) {
 	const u = msg.user || {};
 	const a = msg.action || '?';
 	const label = {add: 'joined', del: 'left', update: 'updated'}[a] || a;
-	return '<span class="chat-user">' + esc(u.name || '?') + '</span> <span class="info">' + label + '</span>';
+	const sid = u.server || msg.from_server || '';
+	return '<span class="chat-user" style="cursor:pointer" onclick="pmUser(\'' + esc(sid) + '\',' + (u.id || 0) + ',\'' + esc(u.name || '?') + '\')">' + esc(u.name || '?') + '</span> <span class="info">' + label + '</span>';
 }
 
 function makeChatText(msg) {
 	const u = msg.user || {};
-	return '<span class="chat-user">' + esc(u.name || '?') + ':</span> <span class="chat-msg">' + esc(msg.say || '') + '</span>';
+	const sid = u.server || msg.from_server || '';
+	return '<span class="chat-user" style="cursor:pointer" onclick="pmUser(\'' + esc(sid) + '\',' + (u.id || 0) + ',\'' + esc(u.name || '?') + '\')">' + esc(u.name || '?') + ':</span> <span class="chat-msg">' + esc(msg.say || '') + '</span>';
 }
 
 function esc(s) {
@@ -233,7 +329,53 @@ function esc(s) {
 	return d.innerHTML;
 }
 
-function addEntry(type, html, raw) {
+function pmUser(server, userId, name) {
+	pmTargetServer = server;
+	pmTargetUserId = userId;
+	pmTargetName = name;
+	pmTarget.textContent = name + ' @ ' + server + ' (#' + userId + ')';
+	pmArea.style.display = 'flex';
+	pmInput.value = '';
+	pmInput.focus();
+}
+
+function renderUserList() {
+	userList.innerHTML = '';
+	const sids = Object.keys(servers).sort();
+	let totalUsers = 0;
+	for (const sid of sids) {
+		const s = servers[sid];
+		const uids = Object.keys(s.users);
+		totalUsers += uids.length;
+		const header = document.createElement('div');
+		header.className = 'ul-server';
+		header.textContent = s.name + ' (' + uids.length + ' user' + (uids.length !== 1 ? 's' : '') + ')';
+		userList.appendChild(header);
+		uids.sort((a, b) => (s.users[a].name || '').localeCompare(s.users[b].name || ''));
+		for (const uid of uids) {
+			const u = s.users[uid];
+			const row = document.createElement('div');
+			row.className = 'ul-user';
+			const dot = document.createElement('span');
+			dot.className = 'ul-dot';
+			dot.classList.add(s.online ? 'online' : 'left');
+			row.appendChild(dot);
+			const name = document.createElement('span');
+			name.className = 'ul-name';
+			name.textContent = u.name || '#' + uid;
+			row.appendChild(name);
+			const idSpan = document.createElement('span');
+			idSpan.className = 'ul-id';
+			idSpan.textContent = '#' + uid;
+			row.appendChild(idSpan);
+			row.addEventListener('click', () => pmUser(sid, uid, u.name || '#' + uid));
+			userList.appendChild(row);
+		}
+	}
+	userListToggle.textContent = 'Users (' + totalUsers + ')';
+}
+
+	function addEntry(type, html, raw) {
 	const entry = document.createElement('div');
 	entry.className = 'entry';
 
@@ -243,7 +385,7 @@ function addEntry(type, html, raw) {
 	const tag = document.createElement('span');
 	tag.className = 'tag ' + type;
 	tag.textContent = {
-		sent: 'sent', received: 'say', system: 'sys', error: 'error'
+		sent: 'sent', received: 'say', system: 'sys', error: 'error', pm: 'pm'
 	}[type] || type;
 	head.appendChild(tag);
 
@@ -309,6 +451,24 @@ msgSend.addEventListener('click', sendMessage);
 msgInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(); });
 jsonSend.addEventListener('click', sendJson);
 jsonInput.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) sendJson(); });
+function sendPm() {
+	const text = pmInput.value.trim();
+	if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+	if (!pmTargetServer || pmTargetUserId === null) return;
+	addEntry('sent', '<span class="chat-user">' + esc(pmTargetName || '#' + pmTargetUserId) + '</span> <span class="info">PM:</span> <span class="chat-msg">' + esc(text) + '</span>', JSON.stringify({cmd: 'pm', server: pmTargetServer, to_user_id: pmTargetUserId, say: text}));
+	ws.send(JSON.stringify({cmd: 'pm', server: pmTargetServer, to_user_id: pmTargetUserId, say: text}));
+	pmInput.value = '';
+	pmArea.style.display = 'none';
+}
+pmSend.addEventListener('click', sendPm);
+pmInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendPm(); });
+pmCancel.addEventListener('click', () => { pmArea.style.display = 'none'; });
+
+userListToggle.addEventListener('click', () => {
+	userListVisible = !userListVisible;
+	userList.style.display = userListVisible ? 'block' : 'none';
+});
+
 leaveBtn.addEventListener('click', () => {
 	joined = false;
 	myUserId = null;

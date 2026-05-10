@@ -22,11 +22,12 @@ Everything was written by AI, sorry. This is for thinking if it makes any sense.
 	  - FEAT: Fix gmod/meta scoreboard to accept format with no steamid
  - Python
    - library
-      - HIGH: private messaging — wire up `on_pm` handler, remove stub
+      - HIGH: private messaging — ✅ `on_pm` handler wired up
    - webchat frontend
       - FEAT: "scoreboard"
 	  - FEAT: actual chat view instead of debug view
-      - HIGH: private messaging
+      - HIGH: private messaging — ✅ PM UI (click user, send/receive PM)
+      - FEAT: client error reporting — ✅ JS errors sent to server, controllable via `webchat.report_client_errors`
 	  - HIGH: steam login (and/or discord?)
    - daemon
 	  - HIGH: steam login? (where to fetch bans?)
@@ -127,12 +128,13 @@ The config file is a JSON document. Example:
 ```
 
 | Key | Description |
-|---|---|
+|---|---|---|
 | `mqtt.host` / `mqtt.port` | MQTT broker address |
 | `server_id` | Unique ID for this server instance |
 | `console_host` / `console_port` | aiomonitor REPL listen address |
 | `webchat_host` / `webchat_port` | WebSocket webchat server listen address |
 | `topic_prefix` | MQTT topic prefix (default `crosschat/`) |
+| `webchat.report_client_errors` | Log JS errors from webchat clients (default `true`) |
 | `meta` | Arbitrary metadata published as retained `/meta` state |
 
 ## Protocol
@@ -215,7 +217,7 @@ Sent to each online server (excluding self). On receipt the recipient user is lo
 | `m/<from>/<to>/pm/<from_user_id>/<to_user_id>` | `{"say": "..."}` |
 
 Sent from a specific user on one server to a specific user on another server.
-On receipt the sender and receiver user info is logged.
+On receipt the handler's `on_pm` callback is invoked with the sender user, target server, target user id, and message.
 
 ### Out-of-Character (OOC) Messaging
 

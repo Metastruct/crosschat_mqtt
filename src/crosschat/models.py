@@ -85,6 +85,7 @@ class UserCommand:
 class CrossChatHandler(Protocol):
 	async def on_user(self, user: CrossChatUser, cmd: str, burst: BurstFlag = BurstFlag.NONE) -> None: ...
 	async def on_say(self, user: CrossChatUser, say: str) -> None: ...
+	async def on_pm(self, sender: CrossChatUser, target_server_id: str, target_user_id: int, say: str) -> None: ...
 	async def on_server_add(self, server: CrossChatServer) -> None: ...
 	async def on_server_del(self, server: CrossChatServer) -> None: ...
 	async def on_server_status(self, server: CrossChatServer) -> None: ...
@@ -110,6 +111,13 @@ class CrossChatServer:
 	async def send_ooc(self, ooc_name: str, payload: Any) -> None:
 		if self._state is not None:
 			await self._state.send_ooc(self.id, ooc_name, payload)
+
+	async def pm(self, to_user_id: int, say: str) -> None:
+		if self._state is not None:
+			await self._state.publish(
+				f'm/{self._state._own_id}/{self.id}/pm/{self._state._own_id}/{to_user_id}',
+				payload=json.dumps({'say': say}),
+			)
 
 	def get_user(self, id: int, create=False, ensure=False):
 		user = self.users.get(id, None)

@@ -66,7 +66,7 @@ local local_users = {}
 
 local subscribers = {}
 
-local translate = {'join', 'left', 'say', 'startburst', 'endburst', 'status', 'message'}
+local translate = {'join', 'left', 'say', 'startburst', 'endburst', 'status', 'message', 'pm'}
 for i = 1, #translate do
 	translate[translate[i]] = i
 end
@@ -590,6 +590,42 @@ function handle_m_say(from_sid, uid, payload)
 	broadcast('say', from_sid, uid_num, text)
 end
 
+function handle_m_pm(from_sid, from_uid, to_uid, payload)
+	if from_sid == SERVER_ID then return end
+	local ok, data = pcall(json.decode, payload)
+	if not ok then return end
+	local text = data.say or ''
+	from_uid = tonumber(from_uid)
+	to_uid = tonumber(to_uid)
+	if not from_uid or not to_uid or text == '' then return end
+
+	local sender_name = '?'
+	local from_server = get_server(from_sid)
+	if from_server and from_server.users[from_uid] then
+		sender_name = from_server.users[from_uid].name or '?'
+	end
+
+	local target_ply
+	for _, sub in ipairs(subscribers) do
+		if IsValid(sub) and sub._crosschat_uid == to_uid then
+			target_ply = sub
+			break
+		end
+	end
+	if not target_ply then
+		DBG('handle_m_pm: target player not found for uid', to_uid)
+		return
+	end
+
+	if not BEGIN('pm') then return end
+	STR(from_sid)
+	INT(from_uid)
+	STR(sender_name)
+	STR(text)
+	net.Send(target_ply)
+	DBG('handle_m_pm: PM from', from_sid, '/#', from_uid, 'to #', to_uid)
+end
+
 function on_mqtt(topic, payload)
 	if topic:sub(1, #TOPIC_PREFIX) ~= TOPIC_PREFIX then return end
 	local path = topic:sub(#TOPIC_PREFIX + 1)
@@ -626,6 +662,9 @@ function on_mqtt(topic, payload)
 		elseif endpoint == 'say' and #parts >= 5 then
 			DBG('on_mqtt: say msg from', from_sid, 'user=', parts[5])
 			handle_m_say(from_sid, parts[5], payload)
+		elseif endpoint == 'pm' and #parts >= 6 then
+			DBG('on_mqtt: pm msg from', from_sid, 'from_user=', parts[5], 'to_user=', parts[6])
+			handle_m_pm(from_sid, parts[5], parts[6], payload)
 		end
 	end
 end
@@ -641,6 +680,24 @@ net.Receive(Tag, function(len, ply)
 		end
 
 		sync_player(ply)
+	elseif what == 2 then
+		local target_server = net.ReadString()
+		local target_user_id = net.ReadUInt(32)
+		local msg = net.ReadString()
+		local uid = ply._crosschat_uid
+		if not uid then
+			ply:PrintMessage(HUD_PRINTTALK, 'You have no crosschat user id yet')
+			return
+		end
+		if not servers[target_server] or not servers[target_server].online then
+			ply:PrintMessage(HUD_PRINTTALK, 'Target server not online or not found')
+			return
+		end
+		local user_src = target_server == SERVER_ID and local_users or servers[target_server].users
+		local target_user = user_src[target_user_id]
+		local target_name = target_user and target_user.name or '#' .. tostring(target_user_id)
+		publish('m/' .. SERVER_ID .. '/' .. target_server .. '/pm/' .. uid .. '/' .. target_user_id, {say = msg})
+		ply:PrintMessage(HUD_PRINTTALK, 'PM sent from #' .. uid .. ' to ' .. target_server .. '/#' .. target_user_id .. ' (' .. target_name .. ')')
 	end
 end)
 
@@ -682,7 +739,13 @@ hook.Add('PlayerSay', Tag, function(ply, txt, teamchat, localchat)
 		end
 	end
 
-	broadcast('say', SERVER_ID, uid, txt)
+	local targets = {}
+	for _, sub in ipairs(subscribers) do
+		if sub ~= ply then
+			table.insert(targets, sub)
+		end
+	end
+	broadcast_all(targets, 'say', SERVER_ID, uid, txt)
 end)
 
 local function handle_player_remove(ply)

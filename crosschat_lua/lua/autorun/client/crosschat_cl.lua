@@ -52,8 +52,8 @@ end
 serverdata = _RAW.serverdata or {}
 local serverdata = serverdata
 
-concommand.Add('crosschat_status', function(_,line)
-	local full = line and line:find"full"
+concommand.Add('crosschat_status', function(ply, cmd, args, arg_str)
+	local full = arg_str and arg_str:find"full"
 	MsgC(white, '[CrossChat] Known servers:\n')
 
 	for _, server in next, serverdata do
@@ -191,8 +191,9 @@ local servernames = {
 }
 
 local crosschat_show = CreateClientConVar('crosschat_show', '1', true, false)
-local crosschat_svname = CreateClientConVar('crosschat_svname', '1', true, false)
-local crosschat_postfix = CreateClientConVar('crosschat_postfix', '0', true, false)
+local crosschat_svname = CreateClientConVar('crosschat_svname', '1', true, false, 'Show server name prefix on crosschat messages')
+local crosschat_postfix = CreateClientConVar('crosschat_postfix', '0', true, false, 'Show server name as postfix instead of prefix')
+local crosschat_joinsummary = CreateClientConVar('crosschat_joinsummary', '1', true, false)
 
 function ChatX(console_only, ServerID, needid, ...)
 	if not crosschat_show:GetBool() then return end
@@ -382,11 +383,16 @@ local statuses = {
 	[1] = 'Server has come online!'
 }
 
+function PlayerPM(ServerID, UserID, Name, Txt)
+	local ply_col, nick = GetPlayerData({Name = Name}, 0)
+	Chat(ServerID, nil, Color(150, 200, 255, 255), '[PM] ', ply_col, nick, white, ': ' .. Txt)
+end
+
 function ConnectionStatus(ServerID, Status)
 	Chat(ServerID, true, statuses[tonumber(Status)] or Status)
 end
 
-local translate = {'join', 'left', 'say', 'startburst', 'endburst', 'status', 'message'}
+local translate = {'join', 'left', 'say', 'startburst', 'endburst', 'status', 'message', 'pm'}
 
 for i = 1, #translate do
 	translate[translate[i]] = i
@@ -428,6 +434,7 @@ net.Receive(Tag, function(len)
 	elseif what == 'endburst' then
 		dbg('net.Receive: endburst')
 		joinburst = false
+		if crosschat_joinsummary:GetBool() then PrintSummary() end
 	elseif what == 'status' then
 		local ServerID = net.ReadString()
 		local Status = net.ReadUInt(32)
@@ -436,10 +443,104 @@ net.Receive(Tag, function(len)
 		local ServerID = net.ReadString()
 		local message = net.ReadString()
 		ConnectionStatus(ServerID, message)
+	elseif what == 'pm' then
+		local ServerID = net.ReadString()
+		local UserID = net.ReadUInt(32)
+		local Name = net.ReadString()
+		local Txt = net.ReadString()
+		PlayerPM(ServerID, UserID, Name, Txt)
 	else
 		dbg('Unhandled message', what or 'NONE??')
 	end
 end)
+
+function GetTable()
+	return serverdata
+end
+
+function PrintSummary()
+	local data = GetTable()
+	local total_players = 0
+	local sids = {}
+	for sid, _ in pairs(data) do table.insert(sids, sid) end
+	table.sort(sids)
+	chat.AddText(Color(255, 180, 80, 255), '[CrossChat] ', Color(255, 255, 255, 255), 'Connected to ' .. #sids .. ' server' .. (#sids ~= 1 and 's' or '') .. ':')
+	for _, sid in ipairs(sids) do
+		local server = data[sid]
+		local active = 0
+		for _, v in pairs(server.players) do
+			if not v.left then active = active + 1 end
+		end
+		local color = servercolors[sid] or Color(200, 200, 200, 255)
+		chat.AddText(Color(150, 150, 150, 255), '  ', color, sid, Color(255, 255, 255, 255), ' (' .. active .. ' player' .. (active ~= 1 and 's' or '') .. ')')
+		total_players = total_players + active
+	end
+	chat.AddText(Color(150, 150, 150, 255), 'Total: ', Color(255, 255, 255, 255), tostring(total_players) .. ' player' .. (total_players ~= 1 and 's' or ''))
+end
+
+function SendPM(target_server, target_user_id, message)
+	target_user_id = tonumber(target_user_id)
+	if not target_server or not target_user_id or not message or message == '' then return false end
+	net.Start(Tag)
+	net.WriteUInt(2, 8)
+	net.WriteString(target_server)
+	net.WriteUInt(target_user_id, 32)
+	net.WriteString(message)
+	net.SendToServer()
+	return true
+end
+
+local function pm_autocomplete(ply, cmd, args)
+	local t = {}
+	local data = GetTable()
+	local argn = #args
+	if argn == 0 then
+		for sid, _ in pairs(data) do
+			table.insert(t, sid)
+		end
+	elseif argn == 1 then
+		local sid = args[1]
+		local server = data[sid]
+		if server then
+			for uid, user in pairs(server.players) do
+				if not user.left then
+					table.insert(t, tostring(uid) .. ' - ' .. (user.Name or '?'))
+				end
+			end
+		end
+	end
+	return t
+end
+
+local function pm_cmd(ply, cmd, args, arg_str)
+	if not args[1] or not args[2] then
+		chat.AddText(Color(255, 180, 80, 255), '[CrossChat] ', Color(255, 255, 255, 255), 'Usage: ' .. cmd .. ' <target_server> <target_user_id> <message>')
+		local data = GetTable()
+		for sid, server in pairs(data) do
+			local count = 0
+			for uid, user in pairs(server.players) do
+				if not user.left then
+					chat.AddText(Color(255, 255, 255, 255), '  ' .. sid .. ' #' .. uid .. ' - ' .. (user.Name or '?'))
+					count = count + 1
+				end
+			end
+			if count == 0 then
+				chat.AddText(Color(200, 200, 200, 255), '  ' .. sid .. ': (no players)')
+			end
+		end
+		return
+	end
+	local target_server = args[1]
+	local target_user_id = tonumber(args[2])
+	if not target_user_id then
+		chat.AddText(Color(255, 180, 80, 255), '[CrossChat] ', Color(255, 255, 255, 255), 'Invalid target_user_id')
+		return
+	end
+	local msg = table.concat(args, ' ', 3)
+	SendPM(target_server, target_user_id, msg)
+end
+concommand.Add('crosschat_pm', pm_cmd, pm_autocomplete, 'Send a private message to a player on another server. Usage: crosschat_pm <target_server> <target_user_id> <message>')
+concommand.Add('pm', pm_cmd, pm_autocomplete, 'Send a private message to a player on another server. Usage: crosschat_pm <target_server> <target_user_id> <message>')
 
 timer.Simple(1, function()
 	if util.NetworkStringToID(Tag) < 1 then

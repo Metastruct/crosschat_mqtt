@@ -117,6 +117,7 @@ public interface ICrossChatHandler
 {
     Task OnUser(CrossChatUser user, string cmd, BurstFlag burst = BurstFlag.None);
     Task OnSay(CrossChatUser user, string say);
+    Task OnPm(CrossChatUser sender, string targetServerId, int targetUserId, string say);
     Task OnServerAdd(CrossChatServer server);
     Task OnServerDel(CrossChatServer server);
     Task OnServerStatus(CrossChatServer server);
