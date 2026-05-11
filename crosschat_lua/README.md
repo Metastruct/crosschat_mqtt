@@ -3,7 +3,7 @@
 Cross-server chat for Garry's Mod via MQTT.
 
 This is the **Garry's Mod Lua** implementation of the CrossChat protocol,
-compatible with the [crosschat-python](https://github.com/Python1320/crosschat_python/tree/master/src/crosschat)
+compatible with the [crosschat-python](https://github.com/Metastruct/crosschat_mqtt)
 reference server.
 
 ## Architecture

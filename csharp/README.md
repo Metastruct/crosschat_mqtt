@@ -1,7 +1,7 @@
 # crosschat-csharp
 
 Cross-server chat via MQTT — C# implementation using MQTTnet.
-Compatible with the [crosschat-python](https://github.com/Python1320/crosschat_python/tree/master/src/crosschat)
+Compatible with the [crosschat-python](https://github.com/Metastruct/crosschat_mqtt)
 reference server and the Lua Garry's Mod implementation.
 
 ## Requirements
