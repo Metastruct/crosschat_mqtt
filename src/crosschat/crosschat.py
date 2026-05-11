@@ -15,6 +15,7 @@ from crosschat.models import PROTOCOL_VERSION, BurstFlag, CrossChatHandler, Cros
 from crosschat.state import CrossChatState
 
 import crosschat.monitor_ext  # noqa: F401
+import crosschat.aowl  # noqa: F401
 
 
 from paho.mqtt.properties import Properties
@@ -489,6 +490,46 @@ class CrossChat:
 						payload=payload,
 					),
 				)
+
+			async def _handle_aowl(server, payload: str, ooc_type: str) -> None:
+				_state = self.state
+				try:
+					data = json.loads(payload)
+				except json.JSONDecodeError:
+					return
+				target_server = data.get('server_id')
+				if target_server and target_server != _state._own_id:
+					return
+				reason = data.get('reason', 'No reason')
+				user_id = data.get('user_id')
+				if user_id is None:
+					return
+				own = _state.me()
+				user = own.users.get(user_id)
+				if not user:
+					log.info('aowl_user_not_found', ooc_type=ooc_type, user_id=user_id)
+					return
+				if ooc_type == 'aowl_kick' or ooc_type == 'aowl_ban':
+					log.info('aowl_exec', action=ooc_type, user=user.name, user_id=user_id, reason=reason)
+					await _state.del_user(user_id)
+					if self._handler is not None:
+						await self._handler.on_user(user, 'del')
+				elif ooc_type == 'aowl_slap':
+					log.info('aowl_exec', action=ooc_type, user=user.name, user_id=user_id, reason=reason)
+					say_text = 'ow'
+					for sid, srv in _state.servers.items():
+						if sid != _state._own_id and srv.online:
+							tg.create_task(
+								_state.publish(
+									f'm/{_state._own_id}/{sid}/say/{user_id}',
+									payload=json.dumps({'say': say_text}),
+								)
+							)
+					if self._handler is not None:
+						await self._handler.on_say(user, say_text)
+
+			for ooc_type in ('aowl_kick', 'aowl_ban', 'aowl_slap'):
+				self.state.subscribe_ooc(ooc_type, _handle_aowl)
 
 			loop = asyncio.get_running_loop()
 			_state = self.state

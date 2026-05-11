@@ -61,6 +61,23 @@ local function send_lua(code, target_sid, who, cb)
 	return false
 end
 
+local function run_preprocess_hooks(from_sid, data, reply)
+	local hooks = hook.GetTable()
+	if not hooks then return end
+	local list = hooks.CrossLuaPreprocess
+	if not list then return end
+	for id, func in pairs(list) do
+		local ok, ret1, ret2 = pcall(func, from_sid, data, reply)
+		if ok and ret1 ~= nil then
+			if ret1 == true then
+				return true
+			elseif ret1 == false then
+				return false, ret2 or 'rejected by hook'
+			end
+		end
+	end
+end
+
 hook.Add('CrossChatOOC', Tag, function(from_sid, ooc_type, payload)
 	if ooc_type ~= 'lua' and ooc_type ~= 'lua_reply' then return end
 
@@ -81,6 +98,21 @@ hook.Add('CrossChatOOC', Tag, function(from_sid, ooc_type, payload)
 	local code = data.code
 	local who = data.steamid or '?'
 	if not code or code == '' then return true end
+
+	local reply_fn = function(msg)
+		local reply = json.encode({id = data.id, result = ('#%s: %s'):format(SERVER_ID, msg)})
+		if crosschat.send_ooc then
+			crosschat.send_ooc(from_sid, 'lua_reply', reply)
+		end
+	end
+
+	local handled, reject_msg = run_preprocess_hooks(from_sid, data, reply_fn)
+	if handled == true then
+		return true
+	elseif handled == false then
+		reply_fn('ERROR: ' .. tostring(reject_msg))
+		return true
+	end
 
 	ErrorNoHalt('[CrossLua] from ' .. from_sid .. ' (#' .. (data.id or '?') .. ', ' .. who .. ')\n')
 	ErrorNoHalt('> ' .. code .. '\n')
@@ -112,10 +144,7 @@ hook.Add('CrossChatOOC', Tag, function(from_sid, ooc_type, payload)
 	end
 
 	if result then
-		local reply = json.encode({id = data.id, result = ('#%s: %s'):format(SERVER_ID, result)})
-		if crosschat.send_ooc then
-			crosschat.send_ooc(from_sid, 'lua_reply', reply)
-		end
+		reply_fn(result)
 	end
 	return true
 end)

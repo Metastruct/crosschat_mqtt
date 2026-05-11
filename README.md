@@ -242,6 +242,92 @@ for level in ('debug', 'warning', 'info'):
         getattr(log, _l)('ooc_log', server_id=server.id, ooc_type=name, payload=payload))
 ```
 
+### CrossAowl — Remote Admin Actions via OOC
+
+CrossChat supports cross-server admin actions (kick/ban/slap) via OOC messages.
+This lets an admin on one server remotely moderate users on another server.
+
+**Two targeting modes:**
+- `steamid64` — broadcast to all servers; each GMod server looks up the player by SteamID64
+- `server_id + user_id` — broadcast to all servers but only the matching server acts (for webchat/demo users)
+
+| OOC Type | Payload (steamid64 mode) | Payload (targeted mode) |
+|---|---|---|
+| `aowl_kick` | `{"steamid64": "...", "reason": "...", "extra": {}}` | `{"server_id": "...", "user_id": <n>, "reason": "...", "extra": {}}` |
+| `aowl_ban` | (same structure) | (same structure) |
+| `aowl_slap` | (same structure) | (same structure) |
+
+**Lua-side (`crossaowl.lua`):**
+- Receives `aowl_kick`/`ban`/`slap` with `steamid64` and executes `player:Kick()`, `player:Ban()`, `player:Slap()`.
+- Targeted `server_id + user_id` messages are acknowledged but not executed (no webchat users on GMod).
+- The `CrossAowlKick`/`CrossAowlBan`/`CrossAowlSlap` hooks are fired before execution for addon integration.
+
+#### Python API
+
+**Sending** — via aiomonitor REPL commands or programmatically:
+
+```python
+# Broadcast by steamid64
+from crosschat.aowl import _send_cmd
+await _send_cmd(state, tg, 'aowl_kick', '76561197986413226', 'spam', {})
+
+# Targeted by server_id + user_id
+await _send_cmd(state, tg, 'aowl_slap', {'server_id': 'myserver', 'user_id': 1}, 'being annoying', {})
+```
+
+**Receiving** — handled automatically by `CrossChat.run()` which subscribes to `aowl_kick`/`ban`/`slap` OOC types. The handler protocol is:
+
+```python
+class CrossChatHandler(Protocol):
+    async def on_user(self, user: CrossChatUser, cmd: str, burst: BurstFlag = BurstFlag.NONE) -> None: ...
+    async def on_say(self, user: CrossChatUser, say: str) -> None: ...
+    # Plus on_pm, on_server_add, on_server_del, on_server_status (see full API)
+```
+
+When a kick/ban with `user_id` is received, `state.del_user(user_id)` is called followed by `handler.on_user(user, 'del')`. When a slap is received, the user says `"ow"` via `handler.on_say(user, 'ow')` and the say is broadcast to all servers.
+
+**Custom handling** — subscribe to aowl OOC types directly:
+
+```python
+async def on_aowl_kick(server: CrossChatServer, payload: str, ooc_type: str):
+    data = json.loads(payload)
+    print(f"Kick from {server.id}: {data}")
+
+chat.state.subscribe_ooc('aowl_kick', on_aowl_kick)
+```
+
+#### C# API
+
+**Sending** — via the static `Aowl` class (`csharp/Aowl.cs`):
+
+```csharp
+// Broadcast by steamid64
+await Aowl.Kick(state, "76561197986413226", "spam");
+await Aowl.Ban(state, "76561197986413226", "griefing");
+await Aowl.Slap(state, "76561197986413226", "being annoying");
+
+// Targeted by server_id + user_id
+await Aowl.KickUser(state, "myserver", 1, "spam");
+await Aowl.BanUser(state, "myserver", 1, "griefing");
+await Aowl.SlapUser(state, "myserver", 1, "being annoying");
+```
+
+**Receiving** — handled automatically by `CrossChatHost.RunAsync()` which subscribes to `aowl_kick`/`ban`/`slap` OOC types. The `ICrossChatHandler` interface is:
+
+```csharp
+public interface ICrossChatHandler
+{
+    Task OnUser(CrossChatUser user, string cmd, BurstFlag burst = BurstFlag.None);
+    Task OnSay(CrossChatUser user, string say);
+    Task OnPm(CrossChatUser sender, string targetServerId, int targetUserId, string say);
+    Task OnServerAdd(CrossChatServer server);
+    Task OnServerDel(CrossChatServer server);
+    Task OnServerStatus(CrossChatServer server);
+}
+```
+
+When a kick/ban with `user_id` is received, `State.DelUser(userId)` is called followed by `handler.OnUser(user, "del")`. When a slap is received, the user says `"ow"` via `handler.OnSay(user, "ow")` and the say is broadcast to all servers.
+
 ### CrossLua — Remote Lua Execution via OOC
 
 CrossChat supports remote Lua code execution across servers via the `lua` OOC type.
@@ -347,6 +433,12 @@ The `CrossChatUser` class provides a `serialize()` method that returns a JSON-se
 | `del <id>` | Remove a local user and broadcast removal |
 | `say <userid> <message>` | Send a message to a user on all online servers |
 | `pm <from_user_id> <target_server_id> <to_user_id> <message>` | Send a private message from a local user to a user on another server |
+| `aowl_kick <steamid64> [reason]` | Kick player by SteamID64 (broadcast) |
+| `aowl_ban <steamid64> [reason]` | Ban player by SteamID64 (broadcast) |
+| `aowl_slap <steamid64> [reason]` | Slap player by SteamID64 (broadcast) |
+| `aowl_kick_user <server_id> <user_id> [reason]` | Kick user by server+userid (targeted) |
+| `aowl_ban_user <server_id> <user_id> [reason]` | Ban user by server+userid (targeted) |
+| `aowl_slap_user <server_id> <user_id> [reason]` | Slap user by server+userid (targeted) |
 
 ## C# Implementation
 
@@ -375,6 +467,8 @@ The REPL supports the same commands as the Python version:
 > say 1 hello                Send chat message from user
 > pm 1 eu2 2 hi              Send private message
 > sendlua eu2 print('hi')    Send Lua code via OOC (replies print asynchronously)
+> aowl_kick 76561197986413226 hmm    Kick player by SteamID64
+> aowl_kick_user myserver 1 bye      Kick user by server+userid
 > exit                       Shutdown
 ```
 

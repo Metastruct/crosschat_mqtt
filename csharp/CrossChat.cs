@@ -155,6 +155,60 @@ public class CrossChatHost
             });
         }
 
+        // Aowl receiving handlers
+        foreach (var oocType in new[] { "aowl_kick", "aowl_ban", "aowl_slap" })
+        {
+            State.SubscribeOoc(oocType, async (server, payload, name) =>
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(payload);
+                    var root = doc.RootElement;
+
+                    var targetServer = root.TryGetProperty("server_id", out var tsEl) ? tsEl.GetString() : null;
+                    if (targetServer != null && targetServer != State.OwnId)
+                        return;
+
+                    var reason = root.TryGetProperty("reason", out var rEl) ? rEl.GetString() ?? "No reason" : "No reason";
+                    var userId = root.TryGetProperty("user_id", out var uEl) && uEl.ValueKind == JsonValueKind.Number ? uEl.GetInt32() : -1;
+                    if (userId < 0)
+                        return;
+
+                    var own = State.Me();
+                    if (!own.Users.TryGetValue(userId, out var user))
+                    {
+                        Console.WriteLine($"[Aowl] User {userId} not found on this server");
+                        return;
+                    }
+
+                    if (oocType == "aowl_kick" || oocType == "aowl_ban")
+                    {
+                        Console.WriteLine($"[Aowl] {oocType} {user.Name} (id={userId}): {reason}");
+                        await State.DelUser(userId);
+                        if (_handler != null)
+                            await _handler.OnUser(user, "del");
+                    }
+                    else if (oocType == "aowl_slap")
+                    {
+                        Console.WriteLine($"[Aowl] slap {user.Name} (id={userId}): {reason}");
+                        var sayText = "ow";
+                        foreach (var kv in State.Servers)
+                        {
+                            if (kv.Key != State.OwnId && kv.Value.Online)
+                                await State.Publish($"m/{State.OwnId}/{kv.Key}/say/{userId}",
+                                    JsonSerializer.Serialize(new { say = sayText }));
+                        }
+                        if (_handler != null)
+                            await _handler.OnSay(user, sayText);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[Aowl] Error handling {oocType}: {ex.Message}");
+                }
+            });
+        }
+
         Console.CancelKeyPress += (_, e) =>
         {
             e.Cancel = true;
@@ -529,6 +583,12 @@ public class CrossChatHost
                         Console.WriteLine("  say <uid> <msg>     Send chat message from user");
                         Console.WriteLine("  pm <from> <sid> <to> <msg>  Send PM");
                         Console.WriteLine("  sendlua <sid> <code>  Send Lua code to a server via OOC");
+                        Console.WriteLine("  aowl_kick <sid64> [reason]       Kick player by SteamID64 (broadcast)");
+                        Console.WriteLine("  aowl_ban  <sid64> [reason]       Ban player by SteamID64 (broadcast)");
+                        Console.WriteLine("  aowl_slap <sid64> [reason]       Slap player by SteamID64 (broadcast)");
+                        Console.WriteLine("  aowl_kick_user <sid> <uid> [r]   Kick user by server+userid");
+                        Console.WriteLine("  aowl_ban_user  <sid> <uid> [r]   Ban user by server+userid");
+                        Console.WriteLine("  aowl_slap_user <sid> <uid> [r]   Slap user by server+userid");
                         Console.WriteLine("  exit / quit         Shutdown");
                         break;
 
@@ -636,6 +696,66 @@ public class CrossChatHost
                             if (_handler != null)
                                 await _handler.OnPm(fromUser, targetSid, pmTo, msg);
                             Console.WriteLine($"PM sent from #{pmFrom} ({fromUser.Name}) to {targetSid}/#{pmTo} ({toUser.Name})");
+                        }
+                        break;
+
+                    case "aowl_kick":
+                        if (args.Length < 2)
+                            Console.WriteLine("Usage: aowl_kick <steamid64> [reason]");
+                        else
+                        {
+                            var reason = args.Length > 2 ? string.Join(" ", args.Skip(2)) : "Kicked by remote admin";
+                            await Aowl.Kick(State, args[1], reason);
+                        }
+                        break;
+
+                    case "aowl_ban":
+                        if (args.Length < 2)
+                            Console.WriteLine("Usage: aowl_ban <steamid64> [reason]");
+                        else
+                        {
+                            var reason = args.Length > 2 ? string.Join(" ", args.Skip(2)) : "Banned by remote admin";
+                            await Aowl.Ban(State, args[1], reason);
+                        }
+                        break;
+
+                    case "aowl_slap":
+                        if (args.Length < 2)
+                            Console.WriteLine("Usage: aowl_slap <steamid64> [reason]");
+                        else
+                        {
+                            var reason = args.Length > 2 ? string.Join(" ", args.Skip(2)) : "Slapped by remote admin";
+                            await Aowl.Slap(State, args[1], reason);
+                        }
+                        break;
+
+                    case "aowl_kick_user":
+                        if (args.Length < 3)
+                            Console.WriteLine("Usage: aowl_kick_user <server_id> <user_id> [reason]");
+                        else if (int.TryParse(args[2], out var kuId))
+                        {
+                            var reason = args.Length > 3 ? string.Join(" ", args.Skip(3)) : "Kicked by remote admin";
+                            await Aowl.KickUser(State, args[1], kuId, reason);
+                        }
+                        break;
+
+                    case "aowl_ban_user":
+                        if (args.Length < 3)
+                            Console.WriteLine("Usage: aowl_ban_user <server_id> <user_id> [reason]");
+                        else if (int.TryParse(args[2], out var buId))
+                        {
+                            var reason = args.Length > 3 ? string.Join(" ", args.Skip(3)) : "Banned by remote admin";
+                            await Aowl.BanUser(State, args[1], buId, reason);
+                        }
+                        break;
+
+                    case "aowl_slap_user":
+                        if (args.Length < 3)
+                            Console.WriteLine("Usage: aowl_slap_user <server_id> <user_id> [reason]");
+                        else if (int.TryParse(args[2], out var suId))
+                        {
+                            var reason = args.Length > 3 ? string.Join(" ", args.Skip(3)) : "Slapped by remote admin";
+                            await Aowl.SlapUser(State, args[1], suId, reason);
                         }
                         break;
 

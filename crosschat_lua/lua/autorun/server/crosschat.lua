@@ -674,11 +674,11 @@ function on_mqtt(topic, payload)
 			handle_m_pm(from_sid, parts[5], parts[6], payload)
 		elseif endpoint == 'ooc' and #parts >= 5 then
 			local ooc_type = parts[5]
-			DBG('on_mqtt: ooc msg from', from_sid, 'type=', ooc_type)
+			DBG('on_mqtt: ooc msg from', from_sid, 'type=', ooc_type, 'payload=', payload)
 			local handled = hook.Run('CrossChatOOC', from_sid, ooc_type, payload)
 			if not handled and not _M._ooc_warned[ooc_type] then
 				_M._ooc_warned[ooc_type] = true
-				DBG('on_mqtt: no handler for ooc type', ooc_type, 'from', from_sid)
+				DBG('on_mqtt: no handler for ooc type', ooc_type, 'from', from_sid, 'payload=', payload)
 			end
 		end
 	end
