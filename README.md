@@ -116,7 +116,10 @@ The config file is a JSON document. Example:
 {
 	"mqtt": {
 		"host": "10.0.0.1",
-		"port": 1883
+		"port": 8883,
+		"username": "metatest1",
+		"password": "change-me",
+		"tls": true
 	},
 	"server_id": "metatest1",
 	"console_host": "0.0.0.0",
@@ -131,14 +134,56 @@ The config file is a JSON document. Example:
 ```
 
 | Key | Description |
-|---|---|---|
+|---|---|
 | `mqtt.host` / `mqtt.port` | MQTT broker address |
+| `mqtt.username` / `mqtt.password` | MQTT credentials for this server. Required unless `mqtt.allow_anonymous` is `true`. |
+| `mqtt.allow_anonymous` | Explicit local/dev opt-in for brokers without authentication. Default `false`. |
+| `mqtt.tls` | Enable TLS with default verification (`true`) or provide a TLS options object. Required with credentials unless `mqtt.allow_insecure_transport` is `true`. |
+| `mqtt.tls.ca_certs` / `mqtt.tls.ca_file` | Optional CA certificate path for private broker certificates. |
+| `mqtt.tls.certfile` / `mqtt.tls.cert_file` | Optional client certificate path. |
+| `mqtt.tls.keyfile` / `mqtt.tls.key_file` | Optional client certificate key path. |
+| `mqtt.tls.verify` | Verify broker certificates when TLS is enabled (default `true`). |
+| `mqtt.tls_insecure` | Passed to the MQTT client for insecure TLS connections. Prefer `mqtt.tls.verify: false` only for local testing. |
+| `mqtt.allow_insecure_transport` | Explicitly allow username/password over non-TLS MQTT. Default `false`. |
 | `server_id` | Unique ID for this server instance |
 | `console_host` / `console_port` | aiomonitor REPL listen address |
 | `webchat_host` / `webchat_port` | WebSocket webchat server listen address |
 | `topic_prefix` | MQTT topic prefix (default `crosschat/`) |
 | `webchat.report_client_errors` | Log JS errors from webchat clients (default `true`) |
 | `meta` | Arbitrary metadata published as retained `/meta` state |
+
+For a web-facing or shared broker, use per-server MQTT credentials and TLS. See
+[`config.example.authenticated.json`](config.example.authenticated.json) for a
+server-authenticated deployment example. The broker should also enforce ACLs so
+each server can only publish as its own `server_id`.
+
+For local no-auth broker testing, opt in explicitly:
+
+```json
+{
+	"mqtt": {
+		"host": "127.0.0.1",
+		"port": 1883,
+		"allow_anonymous": true
+	},
+	"server_id": "local-test"
+}
+```
+
+For a private LAN broker where TLS is not available yet, opt in explicitly to plaintext credentials:
+
+```json
+{
+	"mqtt": {
+		"host": "10.0.0.1",
+		"port": 1883,
+		"username": "metatest1",
+		"password": "change-me",
+		"allow_insecure_transport": true
+	},
+	"server_id": "metatest1"
+}
+```
 
 ## Protocol
 

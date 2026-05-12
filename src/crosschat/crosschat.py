@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import ssl
 import sys
 import time
 import traceback
@@ -29,6 +30,61 @@ properties.SessionExpiryInterval = 9
 
 log: structlog.stdlib.BoundLogger = structlog.get_logger()
 DEBUG = True
+
+
+def _mqtt_bool(value, *, default: bool = False) -> bool:
+	if value is None:
+		return default
+	if isinstance(value, bool):
+		return value
+	if isinstance(value, str):
+		return value.strip().lower() in {'1', 'true', 'yes', 'on'}
+	return bool(value)
+
+
+def _build_tls_params(mqtt_config: dict) -> aiomqtt.TLSParameters | None:
+	tls_config = mqtt_config.get('tls', False)
+	if not tls_config:
+		return None
+
+	if tls_config is True:
+		return aiomqtt.TLSParameters()
+	if not isinstance(tls_config, dict):
+		raise ValueError('mqtt.tls must be a boolean or object')
+
+	verify = _mqtt_bool(tls_config.get('verify'), default=True)
+	cert_reqs = ssl.CERT_REQUIRED if verify else ssl.CERT_NONE
+
+	return aiomqtt.TLSParameters(
+		ca_certs=tls_config.get('ca_certs') or tls_config.get('ca_file'),
+		certfile=tls_config.get('certfile') or tls_config.get('cert_file'),
+		keyfile=tls_config.get('keyfile') or tls_config.get('key_file'),
+		cert_reqs=cert_reqs,
+		ciphers=tls_config.get('ciphers'),
+		keyfile_password=tls_config.get('keyfile_password') or tls_config.get('key_file_password'),
+	)
+
+
+def _mqtt_connection_options(mqtt_config: dict) -> dict:
+	username = mqtt_config.get('username')
+	password = mqtt_config.get('password')
+	allow_anonymous = _mqtt_bool(mqtt_config.get('allow_anonymous'))
+
+	if bool(username) != bool(password):
+		raise ValueError('mqtt.username and mqtt.password must be configured together')
+	if not username and not allow_anonymous:
+		raise ValueError('mqtt.username/password required unless mqtt.allow_anonymous is true')
+
+	tls_params = _build_tls_params(mqtt_config)
+	if username and tls_params is None and not _mqtt_bool(mqtt_config.get('allow_insecure_transport')):
+		raise ValueError('mqtt.tls required when using mqtt.username/password unless mqtt.allow_insecure_transport is true')
+
+	return {
+		'username': username,
+		'password': password,
+		'tls_params': tls_params,
+		'tls_insecure': _mqtt_bool(mqtt_config.get('tls_insecure')) if tls_params is not None else None,
+	}
 
 
 class CrossChat:
@@ -449,8 +505,10 @@ class CrossChat:
 
 		sid = config.get('server_id', '')
 		prefix = config.get('topic_prefix', 'crosschat/')
-		host = config.get('mqtt', {}).get('host', 'localhost')
-		port = config.get('mqtt', {}).get('port', 1883)
+		mqtt_config = config.get('mqtt', {})
+		host = mqtt_config.get('host', 'localhost')
+		port = mqtt_config.get('port', 1883)
+		mqtt_options = _mqtt_connection_options(mqtt_config)
 		console_host = config.get('console_host', '127.0.0.1')
 		console_port = config.get('console_port', 20103)
 		console_enabled = config.get('console_enabled', True)
@@ -476,6 +534,10 @@ class CrossChat:
 			properties=properties,
 			keepalive=4,
 			protocol=aiomqtt.ProtocolVersion.V5,
+			username=mqtt_options['username'],
+			password=mqtt_options['password'],
+			tls_params=mqtt_options['tls_params'],
+			tls_insecure=mqtt_options['tls_insecure'],
 		) as client:
 			log.info('connected', host=host, port=port, server_id=sid)
 			self.state.set_client(client, prefix)

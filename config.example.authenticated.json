@@ -1,0 +1,22 @@
+{
+	"mqtt": {
+		"host": "mqtt.example.com",
+		"port": 8883,
+		"username": "metatest1",
+		"password": "change-me",
+		"tls": true
+	},
+	"server_id": "metatest1",
+	"console_host": "127.0.0.1",
+	"console_port": 20103,
+	"webchat_host": "127.0.0.1",
+	"webchat_port": 8443,
+	"topic_prefix": "crosschat/",
+	"webchat": {
+		"report_client_errors": true
+	},
+	"console_enabled": false,
+	"meta": {
+		"link": "steam://connect/YOUR_IP:27015"
+	}
+}
