@@ -24,10 +24,10 @@ while IFS=: read -r user pass; do
     echo "Added user: $user"
 done < passwd_plain
 
-echo ""
 echo "Password file generated at: $SCRIPT_DIR/passwd"
-echo "Users: 0, 1, 2"
-echo "Passwords matching config.X.json: pass0, pass1, pass2"
+
+echo ""
+echo ""
 
 /sbin/mosquitto -c mosquitto.conf $*
 

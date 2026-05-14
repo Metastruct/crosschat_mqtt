@@ -17,3 +17,6 @@ crosschat_lua_old/*
 crosschat_lua/lua/autorun/server/meta_mqtt.lua
 crosschat_lua/lua/autorun/server/exhibit.lua
 crosschat_lua/cfg/mqtt.cfg
+mosquitto/passwd
+mosquitto/test.sh
+mosquitto/data/mosquitto.db

@@ -1,5 +1,7 @@
 pattern read crosschat/state/+/#
 
+# Pattern ACLs apply to all users even if the "user" keyword has previously been given. 
+
 user 0
 topic read crosschat/m/+/0/#
 topic write crosschat/state/0/#
@@ -14,3 +16,9 @@ user 2
 topic read crosschat/m/+/2/#
 topic write crosschat/state/2/#
 topic write crosschat/m/2/+/#
+
+user observer
+topic read #
+
+user root
+topic readwrite #

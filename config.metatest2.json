@@ -1,7 +1,8 @@
 {
 	"mqtt": {
 		"host": "10.0.0.1",
-		"port": 1883
+		"port": 1883,
+		"allow_insecure_transport": true
 	},
 	"server_id": "metatest2",
 	"console_host": "0.0.0.0",
