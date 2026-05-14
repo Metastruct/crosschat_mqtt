@@ -408,6 +408,7 @@ class CrossChat:
 			return
 		log.debug('user_message', topic=topic, payload=payload)
 		user: CrossChatUser | None = None
+		reason: str = ''
 		if from_sid and from_sid != state._own_id:
 			server = state._ensure_server(from_sid)
 			if cmd == UserCommand.REMOVE:
@@ -442,7 +443,7 @@ class CrossChat:
 				if burst is BurstFlag.END or burst is BurstFlag.STARTEND:
 					server.bursting = False
 		if self._handler is not None and user is not None and cmd in ('join', 'leave', 'update'):
-			await self._handler.on_user(user, cmd, burst=burst)
+			await self._handler.on_user(user, cmd, burst=burst, reason=reason)
 
 	async def _handle_say_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
 		state = self.state
@@ -575,7 +576,7 @@ class CrossChat:
 					log.info('aowl_exec', action=ooc_type, user=user.name, user_id=user_id, reason=reason)
 					await _state.del_user(user_id, reason)
 					if self._handler is not None:
-						await self._handler.on_user(user, 'leave')
+						await self._handler.on_user(user, 'leave', reason=reason)
 				elif ooc_type == 'aowl_slap':
 					log.info('aowl_exec', action=ooc_type, user=user.name, user_id=user_id, reason=reason)
 					say_text = 'ow'

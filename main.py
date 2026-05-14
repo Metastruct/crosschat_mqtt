@@ -31,7 +31,7 @@ def parse_args() -> argparse.Namespace:
 
 
 async def add_and_broadcast(chat: CrossChat, name: str) -> int:
-	return await chat.state.add_user(name)
+	return await chat.state.add_user(name, {'link': 'http://steamcommunity.com/profiles/76561197960265730'})
 
 
 async def main() -> int:

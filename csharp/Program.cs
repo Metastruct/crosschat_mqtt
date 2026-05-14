@@ -47,7 +47,7 @@ Console.WriteLine($"Adding {count} immediate fake user(s)...");
 for (int i = 0; i < count; i++)
 {
     var name = "Imm" + fakeNames[rng.Next(fakeNames.Length)];
-    var uid = await chat.State.AddUser(name);
+    var uid = await chat.State.AddUser(name, new Dictionary<string, object> { ["link"] = "http://steamcommunity.com/profiles/76561197960265730" });
     fakeUserIds.Add(uid);
     Console.WriteLine($"  Added user #{uid}: {name}");
 }

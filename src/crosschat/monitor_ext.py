@@ -25,7 +25,7 @@ def do_status(ctx: click.Context) -> None:
 
 
 async def _do_add(state, handler, name: str) -> None:
-	uid = await state.add_user(name)
+	uid = await state.add_user(name, {'link': 'http://steamcommunity.com/profiles/76561197960265730'})
 	if handler is not None:
 		server = state.servers.get(state._own_id)
 		if server:

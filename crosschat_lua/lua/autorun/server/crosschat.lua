@@ -314,15 +314,20 @@ local function get_join_packet(ply)
 		connected_this_map = ply:ConnectedThisMap()
 	end
 
+	local extra = {
+		connected_this_map = connected_this_map,
+		user_group = ply:GetUserGroup(),
+	}
+	extra.link = ply:IsBot()
+		and 'http://steamcommunity.com/profiles/76561197960265730'
+		or 'http://steamcommunity.com/profiles/' .. (ply:SteamID64() or '0')
+
 	return {
 		name = ply:Name(),
 		steamid64 = ply:SteamID64() or ply:SteamID() or '0',
 		team = ply:Team() or 1,
 		first_seen = os.time(),
-		extra = {
-			connected_this_map = connected_this_map,
-			user_group = ply:GetUserGroup(),
-		}
+		extra = extra,
 	}
 end
 
@@ -785,8 +790,15 @@ hook.Add('PlayerSay', Tag, function(ply, txt, teamchat, localchat)
 	broadcast_all(targets, 'say', SERVER_ID, uid, txt)
 end)
 
+gameevent.Listen('player_disconnect')
 hook.Add('player_disconnect', Tag, function(data)
-	local ply = player.GetByUserID(data.userid)
+	local ply
+	for _, p in ipairs(player.GetAll()) do
+		if p:UserID() == data.userid then
+			ply = p
+			break
+		end
+	end
 	if IsValid(ply) then
 		ply._crosschat_disconnect_reason = data.reason or ''
 	end

@@ -192,7 +192,7 @@ public class CrossChatHost
                         Console.WriteLine($"[Aowl] {oocType} {user.Name} (id={userId}): {reason}");
                         await State.DelUser(userId, reason);
                         if (_handler != null)
-                            await _handler.OnUser(user, "leave");
+                            await _handler.OnUser(user, "leave", reason: reason);
                     }
                     else if (oocType == "aowl_slap")
                     {
@@ -457,15 +457,13 @@ public class CrossChatHost
             }
 
             CrossChatUser? user = null;
+            var reason = root.TryGetProperty("reason", out var rEl) ? rEl.GetString() ?? "" : "";
             var server = State.EnsureServer(fromSid);
 
             if (cmd == "leave")
             {
                 if (server.Users.Remove(userId, out user))
-                {
-                    var reason = root.TryGetProperty("reason", out var rEl) ? rEl.GetString() ?? "" : "";
                     Console.WriteLine($"User {userId} ({user?.Name}) left from {fromSid}: {reason}");
-                }
             }
             else
             {
@@ -504,7 +502,7 @@ public class CrossChatHost
             }
 
             if (_handler != null && user != null && cmd is "join" or "leave" or "update")
-                await _handler.OnUser(user, cmd, burst);
+                await _handler.OnUser(user, cmd, burst, reason);
         }
         catch (Exception ex)
         {
@@ -611,7 +609,7 @@ public class CrossChatHost
                         else
                         {
                             var name = string.Join(" ", args.Skip(1));
-                            var uid = await State.AddUser(name);
+                            var uid = await State.AddUser(name, new Dictionary<string, object> { ["link"] = "http://steamcommunity.com/profiles/76561197960265730" });
                             if (_handler != null && State.Me().Users.TryGetValue(uid, out var user))
                                 await _handler.OnUser(user, "join");
                             Console.WriteLine($"User {uid} ({name}) added");

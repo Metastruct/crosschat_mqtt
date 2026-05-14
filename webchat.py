@@ -30,8 +30,11 @@ class WebchatHandler:
 			except Exception:
 				self._app.state.ws_clients.discard(ws)
 
-	async def on_user(self, user: CrossChatUser, cmd: str, burst: BurstFlag = BurstFlag.NONE) -> None:
-		await self._broadcast({'cmd': 'user', 'user': user.serialize(), 'action': cmd})
+	async def on_user(self, user: CrossChatUser, cmd: str, burst: BurstFlag = BurstFlag.NONE, reason: str = '') -> None:
+		payload: dict = {'cmd': 'user', 'user': user.serialize(), 'action': cmd}
+		if reason:
+			payload['reason'] = reason
+		await self._broadcast(payload)
 
 	async def on_say(self, user: CrossChatUser, say: str) -> None:
 		await self._broadcast({'cmd': 'say', 'user': user.serialize(), 'say': say})
