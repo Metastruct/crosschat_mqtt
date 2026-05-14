@@ -1,0 +1,16 @@
+pattern read crosschat/state/+/#
+
+user 0
+topic read crosschat/m/+/0/#
+topic write crosschat/state/0/#
+topic write crosschat/m/0/+/#
+
+user 1
+topic read crosschat/m/+/1/#
+topic write crosschat/state/1/#
+topic write crosschat/m/1/+/#
+
+user 2
+topic read crosschat/m/+/2/#
+topic write crosschat/state/2/#
+topic write crosschat/m/2/+/#
