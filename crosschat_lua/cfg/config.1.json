@@ -1,0 +1,14 @@
+{
+	"server_id": "1",
+	"topic_prefix": "crosschat/",
+	"mqtt": {
+		"host": "127.0.0.1",
+		"port": 1883,
+		"username": "1",
+		"password": "pass1"
+	},
+	"meta": {
+		"impl": "lua",
+		"link": "steam://connect/YOUR_IP:27015"
+	}
+}

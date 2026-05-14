@@ -78,7 +78,7 @@ class BurstFlag(enum.Enum):
 
 class UserCommand:
 	ADD = 'add'
-	REMOVE = 'del'
+	REMOVE = 'leave'
 	UPDATE = 'update'
 
 
@@ -154,14 +154,14 @@ class CrossChatServer:
 					await state.publish(f'm/{state._own_id}/{sid}/user', payload=payload)
 		return user_id
 
-	async def del_user(self, user_id: int) -> CrossChatUser | None:
+	async def del_user(self, user_id: int, reason: str = '') -> CrossChatUser | None:
 		state = self._state
 		user = self.users.pop(user_id, None)
 		if user is None:
 			return None
 
 		if state is not None and state._client is not None:
-			payload = json.dumps({'id': user.id, 'cmd': 'del'})
+			payload = json.dumps({'id': user.id, 'cmd': 'leave', 'reason': reason})
 			for sid, srv in state.servers.items():
 				if sid != state._own_id and srv.online:
 					await state.publish(f'm/{state._own_id}/{sid}/user', payload=payload)

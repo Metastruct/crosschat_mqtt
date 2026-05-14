@@ -110,9 +110,9 @@ class CrossChatState:
 		server = self.me()
 		return await server.add_user(name, extra)
 
-	async def del_user(self, user_id: int) -> CrossChatUser | None:
+	async def del_user(self, user_id: int, reason: str = '') -> CrossChatUser | None:
 		server = self.me()
-		return await server.del_user(user_id)
+		return await server.del_user(user_id, reason)
 
 	def subscribe_ooc(self, ooc_name: str, callback: Callable) -> None:
 		if ooc_name not in self._ooc_subscribers:

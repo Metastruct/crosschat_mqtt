@@ -389,7 +389,8 @@ function remove_local_user(ply, reason)
 		if sid ~= SERVER_ID and server.online then
 			publish('m/' .. SERVER_ID .. '/' .. sid .. '/user', {
 				id = uid,
-				cmd = 'del',
+				cmd = 'leave',
+				reason = reason or '',
 			})
 		end
 	end
@@ -526,12 +527,13 @@ function handle_m_user(from_sid, payload)
 	local cmd = data.cmd or 'add'
 	local server = get_server(from_sid)
 
-	if cmd == 'del' then
+	if cmd == 'leave' then
 		local user = server.users[uid]
 		server.users[uid] = nil
+		local reason = data.reason or ''
 
 		if user then
-			broadcast('left', from_sid, uid, '')
+			broadcast('left', from_sid, uid, reason)
 		end
 
 		return
@@ -783,9 +785,17 @@ hook.Add('PlayerSay', Tag, function(ply, txt, teamchat, localchat)
 	broadcast_all(targets, 'say', SERVER_ID, uid, txt)
 end)
 
+hook.Add('player_disconnect', Tag, function(data)
+	local ply = player.GetByUserID(data.userid)
+	if IsValid(ply) then
+		ply._crosschat_disconnect_reason = data.reason or ''
+	end
+end)
+
 local function handle_player_remove(ply)
 	if not IsValid(ply) or not ply:IsPlayer() then return end
-	remove_local_user(ply, '')
+	local reason = ply._crosschat_disconnect_reason or ''
+	remove_local_user(ply, reason)
 end
 
 hook.Add('PlayerDisconnected', Tag, handle_player_remove)

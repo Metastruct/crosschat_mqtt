@@ -1,0 +1,13 @@
+{
+	"mqtt": {
+		"host": "127.0.0.1",
+		"port": 1883,
+		"username": "2",
+		"password": "pass2"
+	},
+	"server_id": "2",
+	"topic_prefix": "crosschat/",
+	"meta": {
+		"impl": "csharp"
+	}
+}

@@ -241,11 +241,11 @@ The receiver uses `cmd` to distinguish add/update/delete. Inbound burst values a
 
 | Topic | Payload |
 |---|---|
-| `m/<from>/<to>/user` | `{"id": <n>, "cmd": "add" \| "del" \| "update", "name": "...", "first_seen": "...", "server": "<sid>", "burst": false}` (serialized as `BurstFlag.NONE`, decoded to `BurstFlag.NONE` on receipt) |
+| `m/<from>/<to>/user` | `{"id": <n>, "cmd": "add" \| "leave" \| "update", "name": "...", "first_seen": "...", "server": "<sid>", "burst": false}` (serialized as `BurstFlag.NONE`, decoded to `BurstFlag.NONE` on receipt) |
 
 All user operations share a single topic `m/<from>/<to>/user`. The `cmd` field indicates the action:
 - `"add"`: create a new user
-- `"del"`: remove a user
+- `"leave"`: remove a user (with optional `"reason"` field, defaults to `""`)
 - `"update"`: update an existing user
 
 `id` is a per-server auto-incrementing integer starting at 1. Unknown keys in the user payload are stored in `user.extra`. Messages from self are ignored on receipt (matched by `from_server` in topic). User changes are published to each online server individually.
@@ -314,10 +314,10 @@ This lets an admin on one server remotely moderate users on another server.
 ```python
 # Broadcast by steamid64
 from crosschat.aowl import _send_cmd
-await _send_cmd(state, tg, 'aowl_kick', '76561197986413226', 'spam', {})
+await _send_cmd(state, tg, 'aowl_slap', '76561197986413226', 'first warning given', {})
 
 # Targeted by server_id + user_id
-await _send_cmd(state, tg, 'aowl_slap', {'server_id': 'myserver', 'user_id': 1}, 'being annoying', {})
+await _send_cmd(state, tg, 'aowl_kick', {'server_id': 'myserver', 'user_id': 1}, 'second warning', {})
 ```
 
 **Receiving** — handled automatically by `CrossChat.run()` which subscribes to `aowl_kick`/`ban`/`slap` OOC types. The handler protocol is:
@@ -329,7 +329,7 @@ class CrossChatHandler(Protocol):
     # Plus on_pm, on_server_add, on_server_del, on_server_status (see full API)
 ```
 
-When a kick/ban with `user_id` is received, `state.del_user(user_id)` is called followed by `handler.on_user(user, 'del')`. When a slap is received, the user says `"ow"` via `handler.on_say(user, 'ow')` and the say is broadcast to all servers.
+When a kick/ban with `user_id` is received, `state.del_user(user_id, reason)` is called followed by `handler.on_user(user, 'leave')`. When a slap is received, the user says `"ow"` via `handler.on_say(user, 'ow')` and the say is broadcast to all servers.
 
 **Custom handling** — subscribe to aowl OOC types directly:
 
@@ -347,14 +347,14 @@ chat.state.subscribe_ooc('aowl_kick', on_aowl_kick)
 
 ```csharp
 // Broadcast by steamid64
-await Aowl.Kick(state, "76561197986413226", "spam");
-await Aowl.Ban(state, "76561197986413226", "griefing");
-await Aowl.Slap(state, "76561197986413226", "being annoying");
+await Aowl.Slap(state, "76561197986413226", "first warning given");
+await Aowl.Kick(state, "76561197986413226", "second warning");
+await Aowl.Ban(state, "76561197986413226", "amputate");
 
 // Targeted by server_id + user_id
-await Aowl.KickUser(state, "myserver", 1, "spam");
-await Aowl.BanUser(state, "myserver", 1, "griefing");
-await Aowl.SlapUser(state, "myserver", 1, "being annoying");
+await Aowl.SlapUser(state, "myserver", 1, "first warning given");
+await Aowl.KickUser(state, "myserver", 1, "second warning");
+await Aowl.BanUser(state, "myserver", 1, "amputate");
 ```
 
 **Receiving** — handled automatically by `CrossChatHost.RunAsync()` which subscribes to `aowl_kick`/`ban`/`slap` OOC types. The `ICrossChatHandler` interface is:
@@ -371,7 +371,7 @@ public interface ICrossChatHandler
 }
 ```
 
-When a kick/ban with `user_id` is received, `State.DelUser(userId)` is called followed by `handler.OnUser(user, "del")`. When a slap is received, the user says `"ow"` via `handler.OnSay(user, "ow")` and the say is broadcast to all servers.
+When a kick/ban with `user_id` is received, `State.DelUser(userId, reason)` is called followed by `handler.OnUser(user, "leave")`. When a slap is received, the user says `"ow"` via `handler.OnSay(user, "ow")` and the say is broadcast to all servers.
 
 ### CrossLua — Remote Lua Execution via OOC
 
@@ -475,7 +475,7 @@ The `CrossChatUser` class provides a `serialize()` method that returns a JSON-se
 |---|---|
 | `status` | Show known servers and their online/users state |
 | `add <name>` | Add a local user (auto-generated id) and broadcast to all servers |
-| `del <id>` | Remove a local user and broadcast removal |
+| `del <id> [reason]` | Remove a local user and broadcast removal |
 | `say <userid> <message>` | Send a message to a user on all online servers |
 | `pm <from_user_id> <target_server_id> <to_user_id> <message>` | Send a private message from a local user to a user on another server |
 | `aowl_kick <steamid64> [reason]` | Kick player by SteamID64 (broadcast) |
@@ -512,8 +512,9 @@ The REPL supports the same commands as the Python version:
 > say 1 hello                Send chat message from user
 > pm 1 eu2 2 hi              Send private message
 > sendlua eu2 print('hi')    Send Lua code via OOC (replies print asynchronously)
-> aowl_kick 76561197986413226 hmm    Kick player by SteamID64
-> aowl_kick_user myserver 1 bye      Kick user by server+userid
+> aowl_slap 76561197986413226 "first warning given"  Slap player by SteamID64
+> aowl_kick 76561197986413226 "second warning"       Kick player by SteamID64
+> aowl_kick_user myserver 1 "second warning"         Kick user by server+userid
 > exit                       Shutdown
 ```
 

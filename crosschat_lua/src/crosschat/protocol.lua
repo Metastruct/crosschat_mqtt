@@ -61,7 +61,7 @@ function Protocol.serialize_burst_flag(flag)
 	return false
 end
 
-function Protocol.build_user_payload(user, cmd, burst_flag)
+function Protocol.build_user_payload(user, cmd, burst_flag, reason)
 	local payload = {
 		id = user.id,
 		cmd = cmd,
@@ -72,8 +72,10 @@ function Protocol.build_user_payload(user, cmd, burst_flag)
 		steamid64 = user.steamid64,
 		team = user.team,
 	}
-	if cmd == 'del' then
-		return {id = user.id, cmd = 'del'}
+	if cmd == 'leave' then
+		local result = {id = user.id, cmd = 'leave'}
+		if reason then result.reason = reason end
+		return result
 	end
 	for k, v in pairs(user.extra or {}) do
 		payload[k] = v

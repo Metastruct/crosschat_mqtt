@@ -158,7 +158,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 		if user_id is not None:
 			user = await state.del_user(user_id)
 			if user:
-				await handler.on_user(user, 'del')
+				await handler.on_user(user, 'leave')
 
 
 static_dir = Path(__file__).resolve().parent / 'static'

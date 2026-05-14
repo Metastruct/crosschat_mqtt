@@ -22,12 +22,13 @@ dotnet run -- --server-id myserver --host 10.0.0.1 -v
 ```
 > status                     Show known servers and users
 > add Alice                  Add a local user
-> del 1                      Remove a local user
+> del 1                      Remove a local user (with optional reason: `del 1 reason`)
 > say 1 hello                Send chat message from user
 > pm 1 eu2 2 hi              Send private message
 > sendlua eu2 print('hi')    Send Lua code via OOC
-> aowl_kick 76561197986413226 hmm    Kick player by SteamID64
-> aowl_kick_user myserver 1 bye      Kick user by server+userid
+> aowl_slap 76561197986413226 "first warning given"  Slap player by SteamID64
+> aowl_kick 76561197986413226 "second warning"       Kick player by SteamID64
+> aowl_kick_user myserver 1 "second warning"         Kick user by server+userid
 > exit                       Shutdown
 ```
 
@@ -73,22 +74,24 @@ Messages are broadcast to all online servers. Two targeting modes:
 
 ```csharp
 await Aowl.Kick(state, "76561197986413226", "spam");
-await Aowl.Ban(state, "76561197986413226", "griefing");
-await Aowl.Slap(state, "76561197986413226", "being annoying");
+await Aowl.Slap(state, "76561197986413226", "first warning given");
+await Aowl.Kick(state, "76561197986413226", "second warning");
+await Aowl.Ban(state, "76561197986413226", "amputate");
 ```
 
 ### By server_id + user_id (targeted — only matching server acts)
 
 ```csharp
 await Aowl.KickUser(state, "myserver", 1, "spam");
-await Aowl.BanUser(state, "myserver", 1, "griefing");
-await Aowl.SlapUser(state, "myserver", 1, "being annoying");
+await Aowl.SlapUser(state, "myserver", 1, "first warning given");
+await Aowl.KickUser(state, "myserver", 1, "second warning");
+await Aowl.BanUser(state, "myserver", 1, "amputate");
 ```
 
 ### Receiving
 
 The host automatically subscribes to `aowl_kick`/`ban`/`slap` OOC types:
-- `aowl_kick` / `aowl_ban` with `user_id` → calls `State.DelUser(userId)` then `handler.OnUser(user, "del")`
+- `aowl_kick` / `aowl_ban` with `user_id` → calls `State.DelUser(userId, reason)` then `handler.OnUser(user, "leave")`
 - `aowl_slap` with `user_id` → broadcasts `say` with text `"ow"` then `handler.OnSay(user, "ow")`
 
 ## CrossChatState API

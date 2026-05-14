@@ -112,13 +112,15 @@ public class CrossChatHost
         var mqtt = ConfigHelper.GetObject(_config, "mqtt") ?? [];
         var host = ConfigHelper.GetString(mqtt, "host") ?? "localhost";
         var port = ConfigHelper.GetInt(mqtt, "port") ?? 1883;
+        var mqttUsername = ConfigHelper.GetString(mqtt, "username");
+        var mqttPassword = ConfigHelper.GetString(mqtt, "password");
 
         var factory = new MqttClientFactory();
         var client = factory.CreateMqttClient();
 
         var willPayload = JsonSerializer.Serialize(new Dictionary<string, object> { ["started"] = 0, ["version"] = Protocol.Version });
 
-        var options = new MqttClientOptionsBuilder()
+        var optionsBuilder = new MqttClientOptionsBuilder()
             .WithTcpServer(host, port)
             .WithProtocolVersion(MqttProtocolVersion.V500)
             .WithCleanStart()
@@ -128,8 +130,12 @@ public class CrossChatHost
             .WithWillPayload(willPayload)
             .WithWillRetain(true)
             .WithWillQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
-            .WithClientId(_sid)
-            .Build();
+            .WithClientId(_sid);
+
+        if (!string.IsNullOrEmpty(mqttUsername))
+            optionsBuilder = optionsBuilder.WithCredentials(mqttUsername, mqttPassword);
+
+        var options = optionsBuilder.Build();
 
         client.ApplicationMessageReceivedAsync += async args =>
         {
@@ -184,9 +190,9 @@ public class CrossChatHost
                     if (oocType == "aowl_kick" || oocType == "aowl_ban")
                     {
                         Console.WriteLine($"[Aowl] {oocType} {user.Name} (id={userId}): {reason}");
-                        await State.DelUser(userId);
+                        await State.DelUser(userId, reason);
                         if (_handler != null)
-                            await _handler.OnUser(user, "del");
+                            await _handler.OnUser(user, "leave");
                     }
                     else if (oocType == "aowl_slap")
                     {
@@ -444,7 +450,7 @@ public class CrossChatHost
             }
 
             var cmd = root.TryGetProperty("cmd", out var cmdEl) ? cmdEl.GetString() ?? "" : "";
-            if (cmd is not ("add" or "del" or "update"))
+            if (cmd is not ("add" or "leave" or "update"))
             {
                 Console.Error.WriteLine($"Unknown user cmd '{cmd}' from {fromSid}");
                 return;
@@ -453,10 +459,13 @@ public class CrossChatHost
             CrossChatUser? user = null;
             var server = State.EnsureServer(fromSid);
 
-            if (cmd == "del")
+            if (cmd == "leave")
             {
                 if (server.Users.Remove(userId, out user))
-                    Console.WriteLine($"User {userId} removed from {fromSid}");
+                {
+                    var reason = root.TryGetProperty("reason", out var rEl) ? rEl.GetString() ?? "" : "";
+                    Console.WriteLine($"User {userId} ({user?.Name}) left from {fromSid}: {reason}");
+                }
             }
             else
             {
@@ -494,7 +503,7 @@ public class CrossChatHost
                     server.Bursting = false;
             }
 
-            if (_handler != null && user != null && cmd is "add" or "del" or "update")
+            if (_handler != null && user != null && cmd is "add" or "leave" or "update")
                 await _handler.OnUser(user, cmd, burst);
         }
         catch (Exception ex)
@@ -579,7 +588,7 @@ public class CrossChatHost
                         Console.WriteLine("Commands:");
                         Console.WriteLine("  status              Show known servers and users");
                         Console.WriteLine("  add <name>          Add a local user and broadcast");
-                        Console.WriteLine("  del <id>            Remove a local user");
+                        Console.WriteLine("  del <id> [reason]   Remove a local user");
                         Console.WriteLine("  say <uid> <msg>     Send chat message from user");
                         Console.WriteLine("  pm <from> <sid> <to> <msg>  Send PM");
                         Console.WriteLine("  sendlua <sid> <code>  Send Lua code to a server via OOC");
@@ -611,14 +620,15 @@ public class CrossChatHost
 
                     case "del":
                         if (args.Length < 2)
-                            Console.WriteLine("Usage: del <id>");
+                            Console.WriteLine("Usage: del <id> [reason]");
                         else if (int.TryParse(args[1], out var delId))
                         {
                             var server = State.Me();
                             if (server.Users.TryGetValue(delId, out var delUser))
                             {
-                                await State.DelUser(delId);
-                                Console.WriteLine($"User {delId} ({delUser.Name}) removed");
+                                var reason = args.Length > 2 ? string.Join(" ", args.Skip(2)) : "";
+                                await State.DelUser(delId, reason);
+                                Console.WriteLine($"User {delId} ({delUser.Name}) removed" + (reason != "" ? $" ({reason})" : ""));
                             }
                             else
                                 Console.WriteLine($"User {delId} not found");

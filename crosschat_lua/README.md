@@ -81,7 +81,7 @@ crosschat/
   state/<server_id>/status   -- {"started": <unix_ts>} (retained, LWT)
   state/<server_id>/meta     -- {<arbitrary json>} (retained)
   state/<server_id>/<key>    -- "<value>" (retained, dynamic state)
-  m/<from>/<to>/user         -- user add/del/update + burst flag
+  m/<from>/<to>/user         -- user add/leave/update + burst flag
   m/<from>/<to>/say/<uid>    -- {"say": "..."}
   m/<from>/<to>/pm/<fuid>/<tuid>  -- {"say": "..."}
   m/<from>/<to>/ooc/<type>   -- any JSON value
@@ -208,9 +208,9 @@ kick/ban/slap via OOC. Supports two targeting modes:
 **By SteamID64 (broadcast to all GMod servers):**
 
 ```lua
-crossaowl.kick('76561197986413226', 'spam', {})
-crossaowl.ban('76561197986413226', 'griefing', {})
-crossaowl.slap('76561197986413226', 'being annoying', {})
+crossaowl.slap('76561197986413226', 'first warning given', {})
+crossaowl.kick('76561197986413226', 'second warning', {})
+crossaowl.ban('76561197986413226', 'amputate', {})
 ```
 
 Each server looks up the player by SteamID64 and executes `player:Kick()`,
@@ -219,9 +219,9 @@ Each server looks up the player by SteamID64 and executes `player:Kick()`,
 **By server_id + user_id (targeted, for webchat users):**
 
 ```lua
-crossaowl.kick_user('myserver', 1, 'spam', {})
-crossaowl.ban_user('myserver', 1, 'griefing', {})
-crossaowl.slap_user('myserver', 1, 'being annoying', {})
+crossaowl.slap_user('myserver', 1, 'first warning given', {})
+crossaowl.kick_user('myserver', 1, 'second warning', {})
+crossaowl.ban_user('myserver', 1, 'amputate', {})
 ```
 
 The message is broadcast to all servers but only the one matching `server_id`

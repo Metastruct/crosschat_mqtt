@@ -52,9 +52,9 @@ function CrossChatState:handle_user(from_sid, data)
 	local cmd = data.cmd or 'add'
 	local server = self:get_or_create_server(from_sid)
 	local burst = BurstFlag.deserialize(data.burst)
-	if cmd == 'del' then
+	if cmd == 'leave' then
 		local user = server:del_user(uid)
-		return {user = user, cmd = cmd, burst = burst, server = server}
+		return {user = user, cmd = cmd, burst = burst, server = server, reason = data.reason or ''}
 	end
 	if burst == BurstFlag.START or burst == BurstFlag.STARTEND then
 		server.bursting = true

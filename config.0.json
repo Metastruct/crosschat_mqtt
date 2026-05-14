@@ -1,0 +1,20 @@
+{
+	"mqtt": {
+		"host": "127.0.0.1",
+		"port": 1883,
+		"username": "0",
+		"password": "pass0"
+	},
+	"server_id": "0",
+	"console_host": "0.0.0.0",
+	"console_port": 20100,
+	"webchat_host": "0.0.0.0",
+	"webchat_port": 8760,
+	"topic_prefix": "crosschat/",
+	"webchat": {
+		"report_client_errors": true
+	},
+	"meta": {
+		"impl": "python"
+	}
+}

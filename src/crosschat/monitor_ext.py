@@ -57,12 +57,13 @@ def do_add(ctx: click.Context, name: str) -> None:
 
 @monitor_cli.command(name='del')
 @click.argument('user_id')
+@click.argument('reason', default='', required=False)
 @auto_command_done
-def do_del(ctx: click.Context, user_id: str) -> None:
+def do_del(ctx: click.Context, user_id: str, reason: str) -> None:
 	"""
 	Remove a local user and notify other game servers.
 
-	Usage: del <id>
+	Usage: del <id> [reason]
 	"""
 	monitor = ctx.obj
 	state = monitor.console_locals.get('state')
@@ -81,8 +82,8 @@ def do_del(ctx: click.Context, user_id: str) -> None:
 		print_fail(f'User {user_id} not found')
 		return
 	user_name = user.name
-	tg.create_task(server.del_user(uid))
-	click.echo(f'User {user_id} ({user_name}) removed')
+	tg.create_task(server.del_user(uid, reason))
+	click.echo(f'User {user_id} ({user_name}) removed' + (f' ({reason})' if reason else ''))
 
 
 @monitor_cli.command(name='say')

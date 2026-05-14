@@ -121,7 +121,7 @@ end
 
 local UserCommand = {
 	ADD = 'add',
-	REMOVE = 'del',
+	REMOVE = 'leave',
 	UPDATE = 'update',
 }
 

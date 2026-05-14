@@ -97,16 +97,16 @@ aowl_slap_user <sid> <uid> [reason]    Slap user by server+userid
 from crosschat.aowl import _send_cmd
 
 # By SteamID64 (broadcast)
-await _send_cmd(state, tg, 'aowl_kick', '76561197986413226', 'spam', {})
+await _send_cmd(state, tg, 'aowl_slap', '76561197986413226', 'first warning given', {})
 
 # By server_id + user_id (targeted — broadcast but only matching server acts)
-await _send_cmd(state, tg, 'aowl_slap', {'server_id': 'myserver', 'user_id': 1}, 'being annoying', {})
+await _send_cmd(state, tg, 'aowl_kick', {'server_id': 'myserver', 'user_id': 1}, 'second warning', {})
 ```
 
 ### Receiving (automatic)
 
 The `CrossChat.run()` method subscribes to `aowl_kick`/`ban`/`slap` OOC types:
-- `aowl_kick` / `aowl_ban` with `user_id` → calls `state.del_user(user_id)` then `handler.on_user(user, 'del')`
+- `aowl_kick` / `aowl_ban` with `user_id` → calls `state.del_user(user_id, reason)` then `handler.on_user(user, 'leave')`
 - `aowl_slap` with `user_id` → broadcasts a `say` with text `"ow"` and calls `handler.on_say(user, 'ow')`
 
 ### Custom OOC handlers
@@ -127,7 +127,7 @@ Available via aiomonitor (`telnet localhost 20103`):
 |---------|-------------|
 | `status` | Show known servers and users |
 | `add <name>` | Add a local user and broadcast |
-| `del <id>` | Remove a local user |
+| `del <id> [reason]` | Remove a local user |
 | `say <uid> <msg>` | Send chat message from user |
 | `pm <from> <sid> <to> <msg>` | Send private message |
 | `sendlua <sid> <code>` | Send Lua code via OOC |

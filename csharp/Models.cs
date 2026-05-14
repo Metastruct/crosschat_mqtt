@@ -109,7 +109,7 @@ public static class BurstFlagExtensions
 public static class UserCommand
 {
     public const string Add = "add";
-    public const string Remove = "del";
+    public const string Remove = "leave";
     public const string Update = "update";
 }
 
@@ -197,7 +197,7 @@ public class CrossChatServer
         return userId;
     }
 
-    public async Task<CrossChatUser?> DelUser(int userId)
+    public async Task<CrossChatUser?> DelUser(int userId, string reason = "")
     {
         var state = State;
         if (!Users.Remove(userId, out var user))
@@ -208,7 +208,8 @@ public class CrossChatServer
             var payload = new JsonObject
             {
                 ["id"] = userId,
-                ["cmd"] = "del",
+                ["cmd"] = "leave",
+                ["reason"] = reason,
             }.ToJsonString();
 
             foreach (var kv in state.Servers)

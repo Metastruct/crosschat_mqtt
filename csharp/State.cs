@@ -133,10 +133,10 @@ public class CrossChatState
         return await server.AddUser(name, extra);
     }
 
-    public async Task<CrossChatUser?> DelUser(int userId)
+    public async Task<CrossChatUser?> DelUser(int userId, string reason = "")
     {
         var server = Me();
-        return await server.DelUser(userId);
+        return await server.DelUser(userId, reason);
     }
 
     public void SubscribeOoc(string oocName, Func<CrossChatServer, string, string, Task> callback)
