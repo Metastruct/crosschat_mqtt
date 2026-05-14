@@ -228,7 +228,7 @@ When a server comes online (or restarts with a new `started` timestamp), each al
 
 | Topic | Payload |
 |---|---|
-| `m/<from>/<to>/user` | `{"id": <n>, "cmd": "add", "name": "...", "first_seen": "...", "server": "<sid>", "burst": "start" \| true \| "end"}` |
+| `m/<from>/<to>/user` | `{"id": <n>, "cmd": "join", "name": "...", "first_seen": "...", "server": "<sid>", "burst": "start" \| true \| "end"}` |
 
 - First user in burst: `"burst": "start"` (`BurstFlag.START`)
 - Last user in burst: `"burst": "end"` (`BurstFlag.END`)
@@ -241,10 +241,10 @@ The receiver uses `cmd` to distinguish add/update/delete. Inbound burst values a
 
 | Topic | Payload |
 |---|---|
-| `m/<from>/<to>/user` | `{"id": <n>, "cmd": "add" \| "leave" \| "update", "name": "...", "first_seen": "...", "server": "<sid>", "burst": false}` (serialized as `BurstFlag.NONE`, decoded to `BurstFlag.NONE` on receipt) |
+| `m/<from>/<to>/user` | `{"id": <n>, "cmd": "join" \| "leave" \| "update", "name": "...", "first_seen": "...", "server": "<sid>", "burst": false}` (serialized as `BurstFlag.NONE`, decoded to `BurstFlag.NONE` on receipt) |
 
 All user operations share a single topic `m/<from>/<to>/user`. The `cmd` field indicates the action:
-- `"add"`: create a new user
+- `"join"`: create a new user
 - `"leave"`: remove a user (with optional `"reason"` field, defaults to `""`)
 - `"update"`: update an existing user
 

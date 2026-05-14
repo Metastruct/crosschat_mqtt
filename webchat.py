@@ -103,7 +103,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 				user_id = uid
 				await ws.send_text(json.dumps({'cmd': 'joined', 'user_id': uid, 'name': name}))
 				user = state.servers[state._own_id].users[uid]
-				await handler.on_user(user, 'add')
+				await handler.on_user(user, 'join')
 
 			elif cmd == 'say':
 				if user_id is None:

@@ -77,7 +77,7 @@ class BurstFlag(enum.Enum):
 
 
 class UserCommand:
-	ADD = 'add'
+	ADD = 'join'
 	REMOVE = 'leave'
 	UPDATE = 'update'
 
@@ -146,7 +146,7 @@ class CrossChatServer:
 
 		if state._client is not None:
 			user_data = user.serialize()
-			user_data['cmd'] = 'add'
+			user_data['cmd'] = 'join'
 			user_data['burst'] = BurstFlag.NONE.serialize()
 			payload = json.dumps(user_data)
 			for sid, srv in state.servers.items():

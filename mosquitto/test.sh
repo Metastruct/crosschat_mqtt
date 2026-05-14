@@ -28,3 +28,6 @@ echo ""
 echo "Password file generated at: $SCRIPT_DIR/passwd"
 echo "Users: 0, 1, 2"
 echo "Passwords matching config.X.json: pass0, pass1, pass2"
+
+/sbin/mosquitto -c mosquitto.conf $*
+

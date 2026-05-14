@@ -108,7 +108,7 @@ public static class BurstFlagExtensions
 
 public static class UserCommand
 {
-    public const string Add = "add";
+    public const string Add = "join";
     public const string Remove = "leave";
     public const string Update = "update";
 }
@@ -184,7 +184,7 @@ public class CrossChatServer
         if (state.Client != null)
         {
             var userData = user.Serialize();
-            userData["cmd"] = "add";
+            userData["cmd"] = "join";
             userData["burst"] = BurstFlag.None.Serialize();
             var payload = userData.ToJsonString();
 

@@ -31,7 +31,7 @@ async def _do_add(state, handler, name: str) -> None:
 		if server:
 			user = server.users.get(uid)
 			if user:
-				await handler.on_user(user, 'add')
+				await handler.on_user(user, 'join')
 
 
 @monitor_cli.command(name='add')

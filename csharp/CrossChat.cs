@@ -334,7 +334,7 @@ public class CrossChatHost
                         {
                             var user = users[i];
                             var serialized = user.Serialize();
-                            serialized["cmd"] = "add";
+                            serialized["cmd"] = "join";
 
                             var flag = userCount == 1 ? BurstFlag.Startend
                                 : i == 0 ? BurstFlag.Start
@@ -450,7 +450,7 @@ public class CrossChatHost
             }
 
             var cmd = root.TryGetProperty("cmd", out var cmdEl) ? cmdEl.GetString() ?? "" : "";
-            if (cmd is not ("add" or "leave" or "update"))
+            if (cmd is not ("join" or "leave" or "update"))
             {
                 Console.Error.WriteLine($"Unknown user cmd '{cmd}' from {fromSid}");
                 return;
@@ -495,7 +495,7 @@ public class CrossChatHost
                 ? BurstFlagExtensions.Deserialize(burstEl)
                 : BurstFlag.None;
 
-            if (cmd == "add" && fromSid != State.OwnId)
+            if (cmd == "join" && fromSid != State.OwnId)
             {
                 if (burst is BurstFlag.Start or BurstFlag.Startend)
                     server.Bursting = true;
@@ -503,7 +503,7 @@ public class CrossChatHost
                     server.Bursting = false;
             }
 
-            if (_handler != null && user != null && cmd is "add" or "leave" or "update")
+            if (_handler != null && user != null && cmd is "join" or "leave" or "update")
                 await _handler.OnUser(user, cmd, burst);
         }
         catch (Exception ex)
@@ -613,7 +613,7 @@ public class CrossChatHost
                             var name = string.Join(" ", args.Skip(1));
                             var uid = await State.AddUser(name);
                             if (_handler != null && State.Me().Users.TryGetValue(uid, out var user))
-                                await _handler.OnUser(user, "add");
+                                await _handler.OnUser(user, "join");
                             Console.WriteLine($"User {uid} ({name}) added");
                         }
                         break;

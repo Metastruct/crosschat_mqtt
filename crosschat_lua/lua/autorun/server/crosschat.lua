@@ -339,7 +339,7 @@ function add_local_user(ply)
 		if sid ~= SERVER_ID and server.online then
 			local payload = {
 				id = uid,
-				cmd = 'add',
+				cmd = 'join',
 				name = data.name,
 				first_seen = tostring(data.first_seen),
 				server = SERVER_ID,
@@ -486,7 +486,7 @@ end
 
 				local payload = {
 					id = entry.uid,
-					cmd = 'add',
+					cmd = 'join',
 					name = entry.user.name,
 					first_seen = tostring(entry.user.first_seen),
 					server = SERVER_ID,
@@ -524,7 +524,7 @@ function handle_m_user(from_sid, payload)
 	if not ok or not data.id then return end
 
 	local uid = data.id
-	local cmd = data.cmd or 'add'
+	local cmd = data.cmd or 'join'
 	local server = get_server(from_sid)
 
 	if cmd == 'leave' then

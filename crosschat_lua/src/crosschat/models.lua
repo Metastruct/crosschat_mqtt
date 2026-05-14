@@ -120,7 +120,7 @@ function CrossChatServer:get_or_create_user(uid)
 end
 
 local UserCommand = {
-	ADD = 'add',
+	ADD = 'join',
 	REMOVE = 'leave',
 	UPDATE = 'update',
 }

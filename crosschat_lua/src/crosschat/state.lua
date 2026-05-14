@@ -49,7 +49,7 @@ function CrossChatState:handle_user(from_sid, data)
 	if from_sid == self.own_id then return nil end
 	local uid = data.id
 	if not uid then return nil end
-	local cmd = data.cmd or 'add'
+	local cmd = data.cmd or 'join'
 	local server = self:get_or_create_server(from_sid)
 	local burst = BurstFlag.deserialize(data.burst)
 	if cmd == 'leave' then

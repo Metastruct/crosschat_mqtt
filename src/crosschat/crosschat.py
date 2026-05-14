@@ -343,7 +343,7 @@ class CrossChat:
 						user_count = len(users)
 						for i, user in enumerate(users):
 							serialized = user.serialize()
-							serialized['cmd'] = 'add'
+							serialized['cmd'] = 'join'
 							if user_count == 1:
 								serialized['burst'] = BurstFlag.STARTEND.serialize()
 							elif i == 0:
@@ -402,7 +402,7 @@ class CrossChat:
 		if not isinstance(user_id, int):
 			log.warning('invalid_user_id', topic=topic, user_id=user_id)
 			return
-		cmd = data.get('cmd', 'add')
+		cmd = data.get('cmd', 'join')
 		if cmd not in (UserCommand.ADD, UserCommand.REMOVE, UserCommand.UPDATE):
 			log.warning('unknown_user_cmd', topic=topic, cmd=cmd)
 			return
@@ -434,14 +434,14 @@ class CrossChat:
 				server.users[user_id] = user
 				log.info('user_added', server_id=from_sid, user_id=user_id, name=user.name)
 		burst = BurstFlag.deserialize(data.get('burst'))
-		if cmd == 'add' and from_sid and from_sid != state._own_id:
+		if cmd == 'join' and from_sid and from_sid != state._own_id:
 			server = state.servers.get(from_sid)
 			if server is not None:
 				if burst is BurstFlag.START or burst is BurstFlag.STARTEND:
 					server.bursting = True
 				if burst is BurstFlag.END or burst is BurstFlag.STARTEND:
 					server.bursting = False
-		if self._handler is not None and user is not None and cmd in ('add', 'leave', 'update'):
+		if self._handler is not None and user is not None and cmd in ('join', 'leave', 'update'):
 			await self._handler.on_user(user, cmd, burst=burst)
 
 	async def _handle_say_message(self, from_sid: str, topic: str, parts: list[str], payload: str) -> None:
